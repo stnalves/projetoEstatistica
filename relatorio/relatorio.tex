@@ -151,21 +151,13 @@ modelagem preditiva}
 %%%% Keyword entries to be placed here %%%%
 \keywords{
 regressao linear multipla,
-multicolinearidade,
 selecao de modelos,
-criminalidade,
-diagnostico de residuos}
+diagnostico de residuos,
+usarrests}
 
 %%%% Abstract text to be placed here %%%%%%%%%%%%
 \begin{abstract}
-Este trabalho aplica a metodologia de regressão linear múltipla (MRLM) ao clássico conjunto de dados Iris, coletado por Anderson e popularizado por Fisher,
-com o objetivo de modelar o comprimento da sépala a partir das demais variáveis morfológicas e da espécie da flor. Após uma análise exploratória uni e bivariada,
-incluindo correlações, box-plots e verificação de dados ausentes, ajustamos um modelo inicial com todas as variáveis morfológicas contínuas e identificamos
-multicolinearidade severa entre o comprimento e a largura da pétala. Comparamos modelos candidatos por AIC, BIC e teste F, selecionamos um modelo final e verificamos
-seus pressupostos através de análise de resíduos, gráfico de envelope simulado e identificação de pontos atípicos, de alavanca e influentes. Em seguida, incorporamos
-a espécie como variável qualitativa (dummy), discutindo a codificação por categoria de referência e o efeito de sua alteração sobre a interpretação dos coeficientes.
-Por fim, para dois conjuntos de valores das variáveis explicativas, apresentamos os intervalos de confiança para o valor médio esperado da variável resposta e os
-intervalos de predição para novas observações, com interpretação prática de ambos.
+Este trabalho aplica a metodologia de regressão linear múltipla (MRLM) ao conjunto de dados USArrests, contendo estatísticas de criminalidade violenta por estado americano em 1973. O objetivo é modelar o número de prisões por assalto a partir das taxas de assassinato, estupro e percentual de população urbana. Realizamos uma análise exploratória, ajustamos um modelo inicial com todas as variáveis explicativas contínuas e verificamos a ausência de multicolinearidade severa, diferentemente de outros cenários clássicos. Comparamos modelos candidatos por critério de Akaike (AIC) e selecionamos um modelo final parcimonioso e estatisticamente significante. Verificamos os pressupostos desse modelo através de análise de resíduos, gráfico de envelope simulado e identificação de pontos atípicos, de alavanca e influentes. Por fim, apresentamos os intervalos de confiança para o valor médio esperado da variável resposta e os intervalos de predição para novas observações.
 \end{abstract}
 %%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -320,7 +312,7 @@ A Figura \ref{fig:boxplots} apresenta os box-plots das variáveis da base. Obser
 
 \subsubsection{Análise de correlação}\label{anuxe1lise-de-correlauxe7uxe3o}
 
-A Figura \ref{fig:corrplot} apresenta a matriz de correlações entre as quatro variáveis da base.
+A Figura \ref{fig:corrplot} exibe a matriz de correlações entre as variáveis da base \texttt{USArrests}, e a Figura \ref{fig:ggpairs} apresenta a matriz de dispersão par a par.
 
 \begin{figure}[H]
 
@@ -331,23 +323,41 @@ A Figura \ref{fig:corrplot} apresenta a matriz de correlações entre as quatro 
 \caption{\label{fig:corrplot} Matriz de correlações entre as variáveis da base USArrests.}\label{fig:corrplot}
 \end{figure}
 
-Com relação à análise de correlação, espera-se que as variáveis explicativas apresentem correlação com a variável resposta \texttt{Assault}, mas que as correlações entre as próprias variáveis explicativas não sejam excessivamente elevadas, pois isso pode indicar multicolinearidade. Como regra geral, correlações absolutas superiores a 0,8 merecem atenção.
+\begin{figure}[H]
 
-Examinando a Figura \ref{fig:corrplot}, observa-se que:
+{\centering \includegraphics[width=1\linewidth]{relatorio_files/figure-latex/ggpairs-1} 
+
+}
+
+\caption{\label{fig:ggpairs} Matriz de dispersão par a par das variáveis da base USArrests.}\label{fig:ggpairs}
+\end{figure}
+
+Com relação à análise de correlação, é desejável observar altas correlações das variáveis explicativas com a variável resposta \texttt{Assault}, mas correlações elevadas \emph{entre} as próprias variáveis explicativas podem indicar multicolinearidade. Como regra geral, correlações absolutas iguais ou superiores a \(0{,}8\) constituem um indício importante desse problema. Examinando a Figura \ref{fig:corrplot} em detalhe:
 
 \begin{enumerate}
 \def\labelenumi{\arabic{enumi}.}
 \item
-  A variável resposta \texttt{Assault} apresenta correlação positiva com \texttt{Murder} e \texttt{Rape}, indicando que estados com maiores índices de prisões por assassinato e estupro tendem também a apresentar maiores índices de prisões por assalto.
+  A variável resposta \texttt{Assault}:
+
+  \begin{enumerate}
+  \def\labelenumii{\roman{enumii}.}
+  \tightlist
+  \item
+    apresenta correlação linear forte e positiva com \texttt{Murder} (\(r = 0{,}80\));
+  \item
+    apresenta correlação linear fraca e positiva com \texttt{UrbanPop} (\(r = 0{,}26\));
+  \item
+    apresenta correlação linear moderada e positiva com \texttt{Rape} (\(r = 0{,}66\)).
+  \end{enumerate}
 \item
-  A variável \texttt{UrbanPop} apresenta correlação mais fraca com as demais variáveis, sugerindo menor associação linear com os índices de criminalidade.
+  Entre as variáveis explicativas, \texttt{Murder} correlaciona-se de forma moderada e positiva com \texttt{Rape} (\(r = 0{,}56\)), enquanto as correlações envolvendo \texttt{UrbanPop} apresentam baixa magnitude. Como nenhuma dessas correlações ultrapassa, em valor absoluto, o limiar de \(0{,}8\), elas não configuram, isoladamente, um indício forte de multicolinearidade.
 \item
-  As correlações entre as variáveis explicativas (\texttt{Murder}, \texttt{UrbanPop} e \texttt{Rape}) serão avaliadas juntamente com o VIF para verificar a existência de multicolinearidade.
+  A análise da matriz de correlação sugere que as variáveis explicativas não apresentam correlações suficientemente elevadas para indicar multicolinearidade severa. Essa conclusão será complementada pela análise do fator de inflação da variância (VIF), apresentada na próxima seção.
 \end{enumerate}
 
 \subsubsection{Multicolinearidade: o VIF}\label{multicolinearidade-o-vif}
 
-Para quantificar a multicolinearidade sugerida pela análise de correlação, ajustamos um modelo inicial considerando \texttt{Assault} como variável resposta e \texttt{Murder}, \texttt{UrbanPop} e \texttt{Rape} como variáveis explicativas.
+Para avaliar formalmente a possível multicolinearidade sugerida pela análise de correlação, ajustamos um modelo inicial utilizando \texttt{Assault} como variável resposta e \texttt{Murder}, \texttt{UrbanPop} e \texttt{Rape} como variáveis explicativas. Em seguida, calculamos o fator de inflação da variância (VIF) de cada variável (Tabela \ref{tab:vifCompleto}).
 
 \begin{longtable}[]{@{}lrrrr@{}}
 \caption{\label{tab:coefInicial} Estimativas dos coeficientes do modelo inicial.}\tabularnewline
@@ -368,7 +378,7 @@ Rape & 2.2502 & 0.9432 & 2.3857 & 0.0212 \\
 \end{longtable}
 
 \begin{longtable}[]{@{}lr@{}}
-\caption{\label{tab:vifCompleto} Fator de inflação de variância (VIF) das variáveis explicativas.}\tabularnewline
+\caption{\label{tab:vifCompleto} Fator de inflação de variância (VIF) de cada variável explicativa no modelo inicial.}\tabularnewline
 \toprule\noalign{}
 Variável & VIF \\
 \midrule\noalign{}
@@ -384,35 +394,289 @@ UrbanPop & 1.26 \\
 Rape & 1.84 \\
 \end{longtable}
 
-O modelo inicial será avaliado por meio do coeficiente de determinação ajustado, da significância dos coeficientes e dos valores de VIF. Valores de VIF superiores a 5 indicam possível multicolinearidade, enquanto valores acima de 10 caracterizam um problema mais severo. Caso seja identificada multicolinearidade relevante, será realizada a seleção de um modelo mais adequado antes da análise dos pressupostos.
+O modelo inicial apresenta coeficiente de determinação ajustado igual a \(R^2_{aj} = 0.7009\). Observando a Tabela \ref{tab:coefInicial}, verifica-se que as variáveis \texttt{Murder} e \texttt{Rape} são estatisticamente significativas, enquanto \texttt{UrbanPop} não apresenta evidências suficientes de associação com a variável resposta ao nível de significância de 5\%.
+
+Com relação à multicolinearidade, a Tabela \ref{tab:vifCompleto} mostra que todas as variáveis explicativas apresentam valores de VIF inferiores ao limite de referência de 5, sendo o maior valor igual a 1.84. Esses resultados indicam que não há evidências de multicolinearidade relevante entre as variáveis explicativas, confirmando a conclusão obtida anteriormente por meio da análise da matriz de correlação.
+
+Assim, a presença de multicolinearidade não constitui um problema para o ajuste do modelo, permitindo que a seleção do modelo final seja baseada principalmente na significância estatística das variáveis e nos critérios de comparação entre modelos.
 
 \subsection{Seleção do modelo final}\label{seleuxe7uxe3o-do-modelo-final}
 
-\subsubsection{\texorpdfstring{Seleção automática via \texttt{step}}{Seleção automática via step}}\label{seleuxe7uxe3o-automuxe1tica-via-step}
+Como a variável \texttt{UrbanPop} não apresentou significância estatística no modelo inicial, ajustamos um segundo modelo removendo essa variável e comparamos os dois modelos por meio do coeficiente de determinação ajustado, dos critérios AIC e BIC (Tabela \ref{tab:selecaoModelos}).
+
+\begin{longtable}[]{@{}lrrr@{}}
+\caption{\label{tab:selecaoModelos} Comparação dos modelos candidatos: ajuste, AIC e BIC.}\tabularnewline
+\toprule\noalign{}
+Modelo & R² ajustado & AIC & BIC \\
+\midrule\noalign{}
+\endfirsthead
+\toprule\noalign{}
+Modelo & R² ajustado & AIC & BIC \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+modelo1 (completo) & 0.7009 & 529.67 & 539.23 \\
+modelo2 (sem UrbanPop) & 0.6973 & 529.33 & 536.98 \\
+\end{longtable}
+
+Observa-se que o modelo2 apresenta valores de AIC e BIC menores que o modelo completo, além de manter praticamente o mesmo coeficiente de determinação ajustado. Esses resultados indicam que a remoção de \texttt{UrbanPop} torna o modelo mais parcimonioso, sem perda significativa de qualidade no ajuste.
+
+Para verificar formalmente se a retirada da variável compromete o ajuste do modelo, realizamos um teste F comparando os dois modelos.
+
+\begin{longtable}[]{@{}lrrllll@{}}
+\caption{\label{tab:anovaModelo2} Teste F comparando o modelo2 ao modelo completo (modelo1).}\tabularnewline
+\toprule\noalign{}
+Modelo & GL Res. & SQ Res. & GL & SQ & Estatística F & p-valor \\
+\midrule\noalign{}
+\endfirsthead
+\toprule\noalign{}
+Modelo & GL Res. & SQ Res. & GL & SQ & Estatística F & p-valor \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+modelo2 & 47 & 98796.73 & & & & \\
+modelo1 & 46 & 95564.05 & 1 & 3232.68 & 1.5561 & 0.2186 \\
+\end{longtable}
+
+O teste F apresentou valor de \(p = 0.2186\), indicando que não há evidências suficientes para rejeitar a hipótese nula de que o modelo reduzido explica os dados tão bem quanto o modelo completo.
+
+\begin{longtable}[]{@{}lrrrr@{}}
+\caption{\label{tab:coefModelo2} Estimativas dos coeficientes do modelo selecionado (modelo2).}\tabularnewline
+\toprule\noalign{}
+Termo & Estimativa & Erro Padrão & Estatística t & p-valor \\
+\midrule\noalign{}
+\endfirsthead
+\toprule\noalign{}
+Termo & Estimativa & Erro Padrão & Estatística t & p-valor \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+Intercepto & 18.4663 & 16.6993 & 1.1058 & 0.2744 \\
+Murder & 11.9719 & 1.8204 & 6.5764 & 0.0000 \\
+Rape & 2.7815 & 0.8465 & 3.2858 & 0.0019 \\
+\end{longtable}
 
 \subsection{Diagnóstico do modelo selecionado}\label{diagnuxf3stico-do-modelo-selecionado}
 
+A Tabela \ref{tab:coefModelo2} apresenta as estimativas dos coeficientes do modelo selecionado (\texttt{modelo2}), utilizado para verificar os pressupostos da regressão linear múltipla.
+
+\begin{longtable}[]{@{}lrrrr@{}}
+\caption{\label{tab:coefModelo2} Estimativas dos coeficientes do modelo2 (modelo selecionado).}\tabularnewline
+\toprule\noalign{}
+Termo & Estimativa & Erro Padrão & Estatística t & p-valor \\
+\midrule\noalign{}
+\endfirsthead
+\toprule\noalign{}
+Termo & Estimativa & Erro Padrão & Estatística t & p-valor \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+Intercepto & 18.4663 & 16.6993 & 1.1058 & 0.2744 \\
+Murder & 11.9719 & 1.8204 & 6.5764 & 0.0000 \\
+Rape & 2.7815 & 0.8465 & 3.2858 & 0.0019 \\
+\end{longtable}
+
+\begin{figure}[H]
+
+{\centering \includegraphics[width=1\linewidth]{relatorio_files/figure-latex/diagnosticoModelo2-1} 
+
+}
+
+\caption{Análise de resíduos do modelo2.}\label{fig:diagnosticoModelo2}
+\end{figure}
+
+\begin{figure}[H]
+
+{\centering \includegraphics[width=0.65\linewidth]{relatorio_files/figure-latex/envelopeModelo2-1} 
+
+}
+
+\caption{Gráfico de envelope simulado do modelo2.}\label{fig:envelopeModelo2}
+\end{figure}
+
+As Figuras \ref{fig:diagnosticoModelo2} e \ref{fig:envelopeModelo2} foram utilizadas para avaliar os pressupostos do modelo de regressão. O gráfico de resíduos versus valores ajustados permite verificar a linearidade e a homocedasticidade, enquanto o gráfico quantil-quantil (QQ-plot) e o envelope simulado auxiliam na avaliação da normalidade dos resíduos.
+
+Não sendo observados padrões sistemáticos nos resíduos e permanecendo a maior parte das observações dentro da banda do envelope simulado, considera-se que as suposições de linearidade, variância constante e normalidade dos erros são razoavelmente atendidas. Dessa forma, o modelo selecionado mostra-se adequado para explicar a relação entre as variáveis \texttt{Murder} e \texttt{Rape} e a variável resposta \texttt{Assault}.
+
 \subsubsection{Identificação de pontos atípicos, de alavanca e influentes}\label{identificauxe7uxe3o-de-pontos-atuxedpicos-de-alavanca-e-influentes}
+
+\begin{longtable}[]{@{}
+  >{\raggedright\arraybackslash}p{(\linewidth - 12\tabcolsep) * \real{0.1807}}
+  >{\raggedleft\arraybackslash}p{(\linewidth - 12\tabcolsep) * \real{0.1807}}
+  >{\raggedleft\arraybackslash}p{(\linewidth - 12\tabcolsep) * \real{0.1446}}
+  >{\raggedleft\arraybackslash}p{(\linewidth - 12\tabcolsep) * \real{0.1687}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 12\tabcolsep) * \real{0.0964}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 12\tabcolsep) * \real{0.1084}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 12\tabcolsep) * \real{0.1205}}@{}}
+\caption{\label{tab:pontosInfluentes} Observações atípicas, de alavanca e/ou influentes segundo o modelo2.}\tabularnewline
+\toprule\noalign{}
+\begin{minipage}[b]{\linewidth}\raggedright
+Estado
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedleft
+Resíduo estud.
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedleft
+Alavancagem
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedleft
+Dist. de Cook
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Atípico
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Alavanca
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Influente
+\end{minipage} \\
+\midrule\noalign{}
+\endfirsthead
+\toprule\noalign{}
+\begin{minipage}[b]{\linewidth}\raggedright
+Estado
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedleft
+Resíduo estud.
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedleft
+Alavancagem
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedleft
+Dist. de Cook
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Atípico
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Alavanca
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Influente
+\end{minipage} \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+North Carolina & 2.91 & 0.094 & 0.2531 & Sim & Não & Sim \\
+Georgia & -2.13 & 0.136 & 0.2224 & Sim & Sim & Sim \\
+Rhode Island & 2.14 & 0.060 & 0.0914 & Sim & Não & Sim \\
+Arizona & 2.14 & 0.050 & 0.0752 & Sim & Não & Não \\
+Nevada & -0.97 & 0.170 & 0.0638 & Não & Sim & Não \\
+Delaware & 2.44 & 0.027 & 0.0502 & Sim & Não & Não \\
+Hawaii & -2.11 & 0.028 & 0.0399 & Sim & Não & Não \\
+California & 0.86 & 0.131 & 0.0373 & Não & Sim & Não \\
+Colorado & -0.39 & 0.122 & 0.0070 & Não & Sim & Não \\
+Alaska & 0.02 & 0.170 & 0.0000 & Não & Sim & Não \\
+Mississippi & 0.01 & 0.163 & 0.0000 & Não & Sim & Não \\
+\end{longtable}
+
+Com \(n = 50\) observações e \(p = 3\) parâmetros, o limiar de alavancagem é \(2p/n \approx 0.12\) e o de influência (Cook) é \(4/n \approx 0.08\). Ao todo, 11 observações (22\%) violam pelo menos um dos critérios, e 3 são influentes segundo a distância de Cook.
+
+Como as observações identificadas correspondem a estados reais da base \texttt{USArrests}, não há evidências de erro de registro que justifiquem sua remoção. Assim, o modelo é mantido com todas as observações, preservando a representatividade dos dados para as análises subsequentes.
 
 \subsubsection{Impacto da remoção dos pontos influentes}\label{impacto-da-remouxe7uxe3o-dos-pontos-influentes}
 
+\begin{longtable}[]{@{}lrrr@{}}
+\caption{\label{tab:comparaCoef} Comparação das estimativas antes e depois da remoção dos pontos influentes.}\tabularnewline
+\toprule\noalign{}
+Termo & modelo2 (completo) & modelo2 (refinado) & Diferença (\%) \\
+\midrule\noalign{}
+\endfirsthead
+\toprule\noalign{}
+Termo & modelo2 (completo) & modelo2 (refinado) & Diferença (\%) \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+(Intercept) & 18.466 & 4.019 & -78.23 \\
+Murder & 11.972 & 12.020 & 0.40 \\
+Rape & 2.782 & 3.315 & 19.18 \\
+\end{longtable}
+
+Removendo as 3 observações influentes, o coeficiente de determinação ajustado aumenta de 0.697 para 0.773, e o erro padrão residual diminui de 45.848 para 39.089. As variações nos coeficientes são pequenas, indicando que as observações influentes refletem a variabilidade natural dos dados e não erros de registro. Como a diferença entre as estimativas é reduzida e os pressupostos do modelo já eram atendidos pelo modelo2 completo, optamos por manter todas as observações no modelo final utilizado nas próximas seções, evitando descartar informações relevantes da base \texttt{USArrests}.
+
 \subsection{Interpretações do modelo selecionado}\label{interpretauxe7uxf5es-do-modelo-selecionado}
 
-\subsubsection{Coeficientes padronizados}\label{coeficientes-padronizados}
+O modelo2 explica uma proporção estatisticamente significante e substancial da variância da variável resposta \texttt{Assault} (\(R^2\) ajustado \(= 0.697\); \(F(2, 47) = 57.4\), \(p<0{,}001\)). Especificamente:
 
-\subsection{Regressão com variáveis dummy (a espécie como explicativa)}\label{regressuxe3o-com-variuxe1veis-dummy-a-espuxe9cie-como-explicativa}
+\begin{itemize}
+\item
+  para cada aumento de 1 prisão por assassinato (\texttt{Murder}), por 100 mil habitantes, mantendo \texttt{Rape} constante, o número médio esperado de prisões por assalto aumenta em \(11.972\) por 100 mil habitantes;
+\item
+  para cada aumento de 1 prisão por estupro (\texttt{Rape}), por 100 mil habitantes, mantendo \texttt{Murder} constante, o número médio esperado de prisões por assalto aumenta em \(2.782\) por 100 mil habitantes.
+\end{itemize}
 
-\subsubsection{\texorpdfstring{Modelo sem \texttt{Petal.Length}, com a espécie}{Modelo sem Petal.Length, com a espécie}}\label{modelo-sem-petal.length-com-a-espuxe9cie}
-
-\subsubsection{Alterando a categoria de referência}\label{alterando-a-categoria-de-referuxeancia}
+Note que ambos os efeitos são positivos e coerentes com a análise de correlação apresentada anteriormente. Além disso, a remoção da variável \texttt{UrbanPop} resultou em um modelo mais simples, sem perda significativa de qualidade do ajuste, confirmando que \texttt{Murder} e \texttt{Rape} são suficientes para explicar a maior parte da variação observada em \texttt{Assault}.
 
 \subsection{Comparação geral dos modelos}\label{comparauxe7uxe3o-geral-dos-modelos}
 
+\subsubsection{Coeficientes padronizados}\label{coeficientes-padronizados}
+
+Embora as variáveis explicativas deste modelo sejam medidas na mesma unidade (prisões por 100 mil habitantes), calculamos os coeficientes padronizados para ilustrar a comparação da importância relativa de cada variável explicativa.
+
+\begin{verbatim}
+lm.beta::lm.beta(modelo2)
+\end{verbatim}
+
+\begin{verbatim}
+## 
+## Call:
+## lm(formula = Assault ~ Murder + Rape, data = dados)
+## 
+## Standardized Coefficients::
+## (Intercept)      Murder        Rape 
+##          NA   0.6256897   0.3126158
+\end{verbatim}
+
+Os coeficientes padronizados indicam que \texttt{Murder} (beta padronizado \(\approx 0.63\)) possui maior peso relativo do que \texttt{Rape} (beta padronizado \(\approx 0.31\)) na explicação da variável resposta \texttt{Assault}, uma vez que ambas são comparadas na mesma escala.
+
 \section{Previsões}\label{previsuxf5es}
+
+Para realizar previsões, é recomendável utilizar valores das variáveis explicativas dentro do intervalo observado nos dados (Tabela \ref{tab:descritivas}). Utilizando o modelo2, apresentamos as previsões para dois conjuntos hipotéticos: \(\mathbf{x}_1\), representando um estado com menores taxas de prisões por assassinato (\texttt{Murder\ =\ 5}) e estupro (\texttt{Rape\ =\ 15}); e \(\mathbf{x}_2\), representando um estado com taxas mais elevadas desses crimes (\texttt{Murder\ =\ 15} e \texttt{Rape\ =\ 30}).
 
 \subsection{Intervalo de confiança para o valor médio esperado}\label{intervalo-de-confianuxe7a-para-o-valor-muxe9dio-esperado}
 
+\begin{longtable}[]{@{}rrrrr@{}}
+\caption{\label{tab:previsaoConfianca} Intervalos de confiança de 95\% para o número médio esperado de prisões por assalto, para os dois conjuntos hipotéticos.}\tabularnewline
+\toprule\noalign{}
+Murder & Rape & Estimativa & Limite inferior & Limite superior \\
+\midrule\noalign{}
+\endfirsthead
+\toprule\noalign{}
+Murder & Rape & Estimativa & Limite inferior & Limite superior \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+5 & 15 & 120.05 & 103.77 & 136.32 \\
+15 & 30 & 281.49 & 256.07 & 306.91 \\
+\end{longtable}
+
+\textbf{Interpretação prática}: para um estado com taxa de \texttt{Murder\ =\ 5} e \texttt{Rape\ =\ 15} (por 100 mil habitantes), estimamos que o número \textbf{médio} de prisões por assalto esteja entre 103.77 e 136.32 por 100 mil habitantes, com 95\% de confiança. Já para um estado com \texttt{Murder\ =\ 15} e \texttt{Rape\ =\ 30}, o número médio esperado de prisões por assalto está entre 256.07 e 306.91 por 100 mil habitantes.
+
 \subsection{Intervalo de predição para uma nova observação}\label{intervalo-de-prediuxe7uxe3o-para-uma-nova-observauxe7uxe3o}
+
+\begin{longtable}[]{@{}rrrrr@{}}
+\caption{\label{tab:previsaoPredicao} Intervalos de predição de 95\% para uma nova observação da variável \protect\texttt{Assault}, para os dois conjuntos hipotéticos.}\tabularnewline
+\toprule\noalign{}
+Murder & Rape & Estimativa & Limite inferior & Limite superior \\
+\midrule\noalign{}
+\endfirsthead
+\toprule\noalign{}
+Murder & Rape & Estimativa & Limite inferior & Limite superior \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+5 & 15 & 120.05 & 26.39 & 213.71 \\
+15 & 30 & 281.49 & 185.82 & 377.16 \\
+\end{longtable}
+
+\textbf{Interpretação prática}: se observarmos \textbf{um único novo estado} com taxas de \texttt{Murder\ =\ 5} e \texttt{Rape\ =\ 15} (por 100 mil habitantes), prevemos, com 95\% de confiança, que a taxa de prisões por assalto estará entre 26.39 e 213.71 por 100 mil habitantes. Este intervalo é mais largo do que o intervalo de confiança para a média, pois considera, além da incerteza da estimativa média, a variabilidade natural entre os estados. Da mesma forma, para um novo estado com \texttt{Murder\ =\ 15} e \texttt{Rape\ =\ 30}, a taxa prevista de prisões por assalto estará entre 185.82 e 377.16 por 100 mil habitantes.
+
+Em ambos os casos, a estimativa pontual (120.05 e 281.49 prisões por 100 mil habitantes) permanece a mesma dos intervalos de confiança. A diferença está apenas na largura dos intervalos, refletindo a distinção entre estimar a média da população e prever o valor de uma única observação. Por esse motivo, o intervalo de predição é sempre mais amplo e deve ser utilizado quando o interesse é prever o comportamento de um estado específico.
+
+\section{Conclusão}\label{conclusuxe3o}
+
+A análise exploratória indicou associação positiva entre a variável resposta \texttt{Assault} e as variáveis \texttt{Murder} e \texttt{Rape}, enquanto \texttt{UrbanPop} apresentou relação mais fraca com as demais variáveis. O modelo inicial, contendo todas as variáveis explicativas, apresentou bom ajuste (\(R^2\) ajustado \(= 0.701\)), sem evidências de multicolinearidade severa, uma vez que todos os valores de VIF permaneceram abaixo dos limites de referência.
+
+O modelo final selecionado, composto pelas variáveis \texttt{Murder} e \texttt{Rape}, preservou praticamente o mesmo poder explicativo do modelo completo (perda de apenas 0.4 pontos percentuais no \(R^2\) ajustado) e apresentou valores menores de AIC e BIC, resultando em um modelo mais simples e parcimonioso. Seus pressupostos foram verificados por meio da análise dos resíduos e do gráfico de envelope simulado, e a avaliação dos pontos influentes mostrou que sua remoção não altera de forma relevante as estimativas do modelo.
+
+Por fim, foram obtidos intervalos de confiança para o valor médio esperado e intervalos de predição para novas observações, evidenciando a diferença entre estimar a média da resposta e prever o comportamento de um estado específico. Dessa forma, o modelo selecionado mostrou-se adequado para explicar a variação da taxa de prisões por assalto a partir das taxas de prisões por assassinato e estupro, atendendo aos objetivos propostos neste trabalho.
 
 
 

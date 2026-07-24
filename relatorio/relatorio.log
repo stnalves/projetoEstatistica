@@ -1,4 +1,4 @@
-This is XeTeX, Version 3.141592653-2.6-0.999998 (TeX Live 2026) (preloaded format=xelatex 2026.7.24)  24 JUL 2026 12:28
+This is XeTeX, Version 3.141592653-2.6-0.999998 (TeX Live 2026) (preloaded format=xelatex 2026.7.24)  24 JUL 2026 17:50
 entering extended mode
  restricted \write18 enabled.
  %&-line parsing enabled.
@@ -492,7 +492,7 @@ File: l3backend-xetex.def 2026-02-18 L3 backend support: XeTeX
 \g__pdfannot_backend_link_int=\count353
 ) (./relatorio.aux
 Package babel Info: 'portuguese' activates 'portuges' shorthands.
-(babel)             Reported on input line 9.
+(babel)             Reported on input line 10.
 
 LaTeX Warning: Label `tab:descritivas' multiply defined.
 
@@ -501,6 +501,12 @@ LaTeX Warning: Label `fig:boxplots' multiply defined.
 
 
 LaTeX Warning: Label `fig:corrplot' multiply defined.
+
+
+LaTeX Warning: Label `fig:ggpairs' multiply defined.
+
+
+LaTeX Warning: Label `tab:coefModelo2' multiply defined.
 
 )
 \openout1 = `relatorio.aux'.
@@ -568,57 +574,57 @@ Package hyperref Info: Link coloring ON on input line 136.
 Package babel Info: Main language set to 'portuguese'.
 File: lea_logo_bw.png Graphic file (type bmp)
 <lea_logo_bw.png>
-LaTeX Font Info:    Trying to load font information for U+msa on input line 178.
+LaTeX Font Info:    Trying to load font information for U+msa on input line 170.
 (c:/Users/stnal/AppData/Roaming/TinyTeX/texmf-dist/tex/latex/amsfonts/umsa.fd
 File: umsa.fd 2013/01/14 v3.01 AMS symbols A
 )
-LaTeX Font Info:    Trying to load font information for U+msb on input line 178.
+LaTeX Font Info:    Trying to load font information for U+msb on input line 170.
 (c:/Users/stnal/AppData/Roaming/TinyTeX/texmf-dist/tex/latex/amsfonts/umsb.fd
 File: umsb.fd 2013/01/14 v3.01 AMS symbols B
 )
-LaTeX Font Info:    Trying to load font information for U+euex on input line 178.
+LaTeX Font Info:    Trying to load font information for U+euex on input line 170.
 (c:/Users/stnal/AppData/Roaming/TinyTeX/texmf-dist/tex/latex/amsfonts/ueuex.fd
 File: ueuex.fd 2013/01/14 v3.01 Euler extra symbols
 )
 LaTeX Font Info:    Font shape `T1/phv/b/n' will be
-(Font)              scaled to size 10.20007pt on input line 178.
+(Font)              scaled to size 10.20007pt on input line 170.
 
-Overfull \hbox (12.0pt too wide) in paragraph at lines 178--178
+Overfull \hbox (12.0pt too wide) in paragraph at lines 170--170
 [][] 
  []
 
 LaTeX Font Info:    Font shape `T1/phv/m/n' will be
-(Font)              scaled to size 13.6001pt on input line 178.
+(Font)              scaled to size 13.6001pt on input line 170.
 LaTeX Font Info:    Font shape `T1/phv/m/n' will be
-(Font)              scaled to size 11.90009pt on input line 178.
-LaTeX Font Info:    Calculating math sizes for size <14> on input line 178.
-LaTeX Font Info:    Calculating math sizes for size <11> on input line 178.
+(Font)              scaled to size 11.90009pt on input line 170.
+LaTeX Font Info:    Calculating math sizes for size <14> on input line 170.
+LaTeX Font Info:    Calculating math sizes for size <11> on input line 170.
 
 LaTeX Font Warning: Font shape `OT1/cmr/m/n' in size <5.5> not available
-(Font)              size <5> substituted on input line 178.
+(Font)              size <5> substituted on input line 170.
 
 
 LaTeX Font Warning: Font shape `OML/cmm/m/it' in size <5.5> not available
-(Font)              size <5> substituted on input line 178.
+(Font)              size <5> substituted on input line 170.
 
 
 LaTeX Font Warning: Font shape `OMS/cmsy/m/n' in size <5.5> not available
-(Font)              size <5> substituted on input line 178.
+(Font)              size <5> substituted on input line 170.
 
 LaTeX Font Info:    Font shape `T1/phv/b/n' will be
-(Font)              scaled to size 9.35007pt on input line 178.
+(Font)              scaled to size 9.35007pt on input line 170.
 LaTeX Font Info:    Font shape `T1/phv/m/n' will be
-(Font)              scaled to size 8.50006pt on input line 178.
+(Font)              scaled to size 8.50006pt on input line 170.
 LaTeX Font Info:    Font shape `T1/phv/b/n' will be
-(Font)              scaled to size 8.50006pt on input line 178.
-LaTeX Font Info:    Trying to load font information for T1+pcr on input line 183.
+(Font)              scaled to size 8.50006pt on input line 170.
+LaTeX Font Info:    Trying to load font information for T1+pcr on input line 175.
 (c:/Users/stnal/AppData/Roaming/TinyTeX/texmf-dist/tex/latex/psnfss/t1pcr.fd
 File: t1pcr.fd 2001/06/04 font definitions for T1/pcr.
 ) [1
 
 
 ]
-Overfull \hbox (2.2201pt too wide) in paragraph at lines 284--284
+Overfull \hbox (2.2201pt too wide) in paragraph at lines 276--276
 []|\T1/ppl/m/n/9 UrbanPop|  
  []
 
@@ -626,19 +632,31 @@ Overfull \hbox (2.2201pt too wide) in paragraph at lines 284--284
 File: relatorio_files/figure-latex/boxplots-1.pdf Graphic file (type pdf)
 <use relatorio_files/figure-latex/boxplots-1.pdf>
 LaTeX Font Info:    Font shape `T1/phv/b/n' will be
-(Font)              scaled to size 7.22505pt on input line 318.
+(Font)              scaled to size 7.22505pt on input line 310.
 LaTeX Font Info:    Font shape `T1/phv/m/n' will be
-(Font)              scaled to size 7.22505pt on input line 318.
+(Font)              scaled to size 7.22505pt on input line 310.
 LaTeX Font Info:    Font shape `T1/phv/m/n' will be
-(Font)              scaled to size 10.20007pt on input line 321.
+(Font)              scaled to size 10.20007pt on input line 313.
 File: relatorio_files/figure-latex/corrplot-1.pdf Graphic file (type pdf)
 <use relatorio_files/figure-latex/corrplot-1.pdf>
 [3]
-Underfull \hbox (badness 1014) in paragraph at lines 350--351
-[]\T1/ppl/m/n/9 Para quan-ti-fi-car a mul-ti-co-li-ne-a-ri-dade su-ge-rida pela aná-lise de cor-re-la-ção, ajus-ta-mos um mo-delo ini-cial
+File: relatorio_files/figure-latex/ggpairs-1.pdf Graphic file (type pdf)
+<use relatorio_files/figure-latex/ggpairs-1.pdf>
+[4]
+Underfull \hbox (badness 1168) in paragraph at lines 360--361
+\T1/ppl/m/n/9 mo-delo ini-cial uti-li-zando \T1/pcr/m/n/9 Assault \T1/ppl/m/n/9 como va-ri-á-vel res-posta e \T1/pcr/m/n/9 Murder\T1/ppl/m/n/9 , \T1/pcr/m/n/9 UrbanPop \T1/ppl/m/n/9 e \T1/pcr/m/n/9 Rape \T1/ppl/m/n/9 como va-ri-á-veis
  []
 
-[4] (./relatorio.bbl) Setting LastPage [5] (./relatorio.aux)
+[5] [6]
+File: relatorio_files/figure-latex/diagnosticoModelo2-1.pdf Graphic file (type pdf)
+<use relatorio_files/figure-latex/diagnosticoModelo2-1.pdf>
+File: relatorio_files/figure-latex/envelopeModelo2-1.pdf Graphic file (type pdf)
+<use relatorio_files/figure-latex/envelopeModelo2-1.pdf>
+[7] [8]
+LaTeX Font Info:    Trying to load font information for TS1+ppl on input line 598.
+(c:/Users/stnal/AppData/Roaming/TinyTeX/texmf-dist/tex/latex/psnfss/ts1ppl.fd
+File: ts1ppl.fd 2001/06/04 font definitions for TS1/ppl.
+) [9] (./relatorio.bbl [10]) Setting LastPage [11] (./relatorio.aux)
  ***********
 LaTeX2e <2026-06-01>
 L3 programming layer <2026-06-18>
@@ -651,15 +669,15 @@ LaTeX Font Warning: Size substitutions with differences
 LaTeX Warning: There were multiply-defined labels.
 
 Package rerunfilecheck Info: File `relatorio.out' has not changed.
-(rerunfilecheck)             Checksum: 20051FA7305355E76404959BB894A6AD;6066.
+(rerunfilecheck)             Checksum: BE2BED93E356864485A365BD702B5CB8;4910.
  ) 
 Here is how much of TeX's memory you used:
- 14204 strings out of 469821
- 224012 string characters out of 5467124
- 674078 words of memory out of 5000000
- 42903 multiletter control sequences out of 15000+600000
- 666688 words of font info for 105 fonts, out of 8000000 for 9000
+ 14286 strings out of 469821
+ 226361 string characters out of 5467124
+ 677856 words of memory out of 5000000
+ 42975 multiletter control sequences out of 15000+600000
+ 668537 words of font info for 109 fonts, out of 8000000 for 9000
  26 hyphenation exceptions out of 8191
- 86i,12n,93p,546b,450s stack positions out of 10000i,1000n,20000p,200000b,200000s
+ 86i,12n,93p,987b,488s stack positions out of 10000i,1000n,20000p,200000b,200000s
 
-Output written on relatorio.pdf (5 pages).
+Output written on relatorio.pdf (11 pages).

@@ -1,5 +1,5 @@
 ``` bash
-rmarkdown::render("relatorio/relatorio.Rmd")
+rmarkdown::render("projeto/relatorio/relatorio.Rmd")
 ```
 
 ``` bash
