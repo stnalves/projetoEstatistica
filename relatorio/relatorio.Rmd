@@ -1,0 +1,374 @@
+---
+title: "Estatísticas de criminalidade violenta por estado americano (por 100 mil habitantes): assassinatos, assaltos e estupros, além do percentual da população urbana."
+
+# informacoes da disciplina, exibidas no cabecalho do artigo
+disciplina: "Estatística Aplicada"
+periodo: "2026.1"
+professores:
+  - "Profa. Dra. Amanda Gomes"
+  - "Prof. Dr. Jerfson Bruno"
+  - "Prof. Dr. Gilberto Matos"
+
+# use letras para afiliacao
+# substitua "[Nome do Aluno]" pelos nomes dos ate 3 integrantes da equipe
+author:
+  - name: "Stefany Nicole Santos Alves"
+    affiliation: a
+  # - name: "[Nome do Aluno]"
+  #   affiliation: a
+  # - name: "[Nome do Aluno]"
+  #   affiliation: a
+address:
+  - code: a
+    address: Departamento de Ciência da Computação - UFCG
+
+# area do conhecimento (pelo menos uma)
+subject:
+  - "estatistica aplicada"
+  - "modelagem preditiva"
+
+# palavras-chave
+keywords:
+  - regressao linear multipla # coloque o principal metodo estatistico utilizado como primeira palavra chave a fim de facilitar a catalogacao do LEA
+  - multicolinearidade
+  - selecao de modelos
+  - criminalidade
+  - diagnostico de residuos # ?
+
+# resumo - note a barra vertical e os dois espaços no início do parágrafo
+abstract: |
+  Este trabalho aplica a metodologia de regressão linear múltipla (MRLM) ao clássico conjunto de dados Iris, coletado por Anderson e popularizado por Fisher,
+  com o objetivo de modelar o comprimento da sépala a partir das demais variáveis morfológicas e da espécie da flor. Após uma análise exploratória uni e bivariada,
+  incluindo correlações, box-plots e verificação de dados ausentes, ajustamos um modelo inicial com todas as variáveis morfológicas contínuas e identificamos
+  multicolinearidade severa entre o comprimento e a largura da pétala. Comparamos modelos candidatos por AIC, BIC e teste F, selecionamos um modelo final e verificamos
+  seus pressupostos através de análise de resíduos, gráfico de envelope simulado e identificação de pontos atípicos, de alavanca e influentes. Em seguida, incorporamos
+  a espécie como variável qualitativa (dummy), discutindo a codificação por categoria de referência e o efeito de sua alteração sobre a interpretação dos coeficientes.
+  Por fim, para dois conjuntos de valores das variáveis explicativas, apresentamos os intervalos de confiança para o valor médio esperado da variável resposta e os
+  intervalos de predição para novas observações, com interpretação prática de ambos.
+
+# arquivo com a bibliografia do relatorio
+bibliography: modeloUFCG.bib
+
+output:
+  bookdown::pdf_book:
+    base_format: modeloUFCG::modeloUFCG
+    # includes:
+    #   after_body: orientacoes.tex
+---
+
+
+```{r definicoes, include=FALSE, message=FALSE, warning=FALSE}
+# pacotes a serem carregados para a analise
+library(ggplot2)
+theme_set(theme_bw())
+library(ggfortify)
+library(GGally)
+library(corrplot)
+library(broom)
+library(hnp)
+
+# definicoes globais
+knitr::opts_chunk$set(
+  fig.width = 5, fig.height = 4, out.width = "100%",
+  echo = FALSE, message = FALSE, warning = FALSE,
+  fig.pos = 'H'
+)
+
+# dados <- "09_USArrests.csv"
+dados <- read.csv("09_USArrests.csv", row.names = 1)
+names(dados)
+
+# funcao auxiliar: grafico de envelope simulado, silenciando mensagens do pacote hnp
+grafico_envelope <- function(modelo, seed = 1) {
+  set.seed(seed)
+  invisible(capture.output(
+    h <- hnp(modelo, halfnormal = FALSE, verb.sim = FALSE, plot.sim = FALSE)
+  ))
+  plot(h, xlab = "Quantis teóricos N(0,1)", ylab = "Resíduos",
+       main = "")
+}
+
+# funcao auxiliar: tabela de coeficientes formatada
+tabela_coeficientes <- function(modelo, digitos = 4) {
+  tab <- broom::tidy(modelo)
+  tab$term <- gsub("Species", "Espécie: ", tab$term)
+  tab$term <- gsub("\\(Intercept\\)", "Intercepto", tab$term)
+  names(tab) <- c("Termo", "Estimativa", "Erro Padrão", "Estatística t", "p-valor")
+  knitr::kable(tab, format = "pipe", digits = digitos)
+}
+
+# funcao auxiliar: fator de inflacao de variancia (VIF), sem depender do pacote car
+vif_manual <- function(modelo) {
+  X <- model.matrix(modelo)[, -1, drop = FALSE]
+  sapply(colnames(X), function(cn) {
+    y <- X[, cn]
+    x <- X[, colnames(X) != cn, drop = FALSE]
+    r2 <- summary(lm(y ~ x))$r.squared
+    1 / (1 - r2)
+  })
+}
+```
+
+
+
+# Introdução
+
+A criminalidade é um tema importante para a análise de dados, pois diferentes fatores podem estar relacionados aos índices de violência. A base de dados utilizada
+neste trabalho, **USArrests**, reúne informações dos 50 estados americanos referentes ao ano de 1973. Ela contém o número de **prisões por assassinato** (`Murder`),
+**assalto** (`Assault`) e **estupro** (`Rape`), por 100 mil habitantes, além do percentual da população que vive em áreas urbanas (`UrbanPop`).
+
+Neste trabalho, o objetivo é modelar o número de **prisões por assalto** (`Assault`) a partir das demais variáveis da base. Esse problema é interessante porque permite
+analisar como diferentes tipos de crimes e o nível de urbanização estão relacionados com a variável resposta, além de aplicar técnicas de regressão linear múltipla.
+
+Especificamente, buscamos:
+(i) descrever a base de dados e realizar uma análise exploratória;
+(ii) ajustar um modelo inicial de regressão linear múltipla;
+(iii) avaliar a presença de multicolinearidade e selecionar um modelo mais adequado;
+(iv) verificar os pressupostos do modelo; e
+(v) interpretar os resultados obtidos.
+
+# Metodologia
+
+Os dados correspondem aos 50 estados americanos no ano de 1973, sem valores ausentes, contendo quatro variáveis numéricas: `Murder`, `Assault`, `UrbanPop` e `Rape`.
+A análise exploratória compreendeu estatísticas descritivas, matriz de correlação, histogramas, boxplots e matriz de dispersão entre as variáveis.
+
+## Modelo de regressão linear múltipla
+
+Seja $y_i$ o número de **prisões por assalto** da $i$-ésima observação (estado). O modelo inicial, utilizando todas as demais variáveis da base como explicativas, é dado por
+
+$$
+y_i = \beta_0 + \beta_1,\text{Murder}_i + \beta_2,\text{UrbanPop}_i + \beta_3,\text{Rape}_i + \varepsilon_i,
+$$
+
+\noindent em que $\varepsilon_i$ segue as suposições usuais do Modelo de Regressão Linear Múltipla (MRLM) \cite{Kutner2004}: média nula, variância constante,
+independência e normalidade.
+
+A multicolinearidade entre as variáveis explicativas foi avaliada por dois critérios complementares: (a) a matriz de correlações entre as variáveis preditoras,
+em que valores absolutos de correlação maiores que 0,8 indicam possível multicolinearidade; e (b) o fator de inflação da variância (VIF), dado por
+$\text{VIF}_j = 1/(1-R_j^2)$, em que $R_j^2$ é o coeficiente de determinação da regressão de $X_j$ sobre as demais variáveis explicativas. Valores de $\text{VIF}$
+superiores a 5 indicam possível problema de multicolinearidade, enquanto valores acima de 10 sugerem multicolinearidade severa \cite{Kutner2004}.
+
+A seleção do modelo foi realizada utilizando os critérios de informação de Akaike (AIC) \cite{Akaike1974} e Bayesiano (BIC) \cite{Schwarz1978}, além do teste
+$F$ para comparação entre modelos aninhados. Em ambos os critérios de informação, modelos com menores valores de AIC e BIC são preferíveis. Como apoio à seleção,
+também foi utilizado o procedimento automático *stepwise* (`step`), baseado no critério AIC, permitindo comparar a seleção automática com a escolha baseada na interpretação
+estatística dos resultados.
+
+## Diagnóstico do modelo
+
+A adequação do modelo selecionado foi avaliada por meio da análise gráfica dos resíduos, utilizando os gráficos de resíduos versus valores ajustados, quantil-quantil
+(Q-Q Plot), escala-localização e resíduos versus alavancagem. Esses gráficos permitem verificar os principais pressupostos do Modelo de Regressão Linear Múltipla,
+como linearidade, homocedasticidade, normalidade dos resíduos e a presença de observações influentes \cite{Kutner2004}.
+
+Também foram analisadas possíveis observações atípicas, de alavanca e influentes utilizando os resíduos studentizados ($|t_i| > 2$), os valores de alavancagem
+($h_{ii} > 2p/n$) e a distância de Cook ($D_i > 4/n$) \cite{Cook1977,CookWeisberg1982,Kutner2004}. Caso fossem identificadas observações com influência significativa
+sobre o ajuste, seria avaliado o impacto de sua remoção por meio do reajuste do modelo.
+
+Por fim, para facilitar a comparação da influência das variáveis explicativas, foram calculados os coeficientes padronizados do modelo final. Como as variáveis estão em
+escalas diferentes, essa padronização permite comparar diretamente a contribuição relativa de cada variável para explicar o número de prisões por assalto.
+
+## Variáveis explicativas
+
+Diferentemente de outros conjuntos de dados que possuem variáveis categóricas, a base **USArrests** é composta apenas por variáveis numéricas (`Murder`, `UrbanPop` e `Rape`),
+utilizadas como variáveis explicativas do modelo. Dessa forma, não foi necessária a criação de variáveis *dummy* nem a definição de uma categoria de referência.
+O modelo foi ajustado diretamente utilizando essas variáveis contínuas para explicar o número de prisões por assalto (`Assault`).
+
+## Inferência preditiva
+
+Para um conjunto de valores das variáveis explicativas (`Murder`, `UrbanPop` e `Rape`), é possível realizar dois tipos de inferência \cite{Kutner2004}:
+o **intervalo de confiança** para o valor médio esperado de prisões por assalto, que estima a média da resposta para estados com essas características, e
+o **intervalo de predição** para uma **nova observação**, que estima um valor futuro de prisões por assalto para um estado com as mesmas características.
+Como o intervalo de predição considera também a variabilidade entre observações individuais, ele é naturalmente mais amplo que o intervalo de confiança.
+Ambos foram calculados para dois conjuntos hipotéticos de valores das variáveis explicativas, escolhidos dentro do intervalo observado na base de dados.
+
+
+
+# Resultados
+
+## Descrição da base de dados
+
+A base `USArrests` possui $n = 50$ observações, correspondentes aos 50 estados americanos, e 4 variáveis numéricas (Tabela \ref{tab:variaveis}), sem valores ausentes.
+
+```{r variaveis, results='asis'}
+tab_var <- data.frame(
+  Variável = c("Murder", "Assault", "UrbanPop", "Rape"),
+  Descrição = c(
+    "Prisões por assassinato (por 100 mil habitantes)",
+    "Prisões por assalto (variável resposta, por 100 mil habitantes)",
+    "Percentual da população urbana",
+    "Prisões por estupro (por 100 mil habitantes)"
+  ),
+  Unidade = c(
+    "prisões/100 mil habitantes",
+    "prisões/100 mil habitantes",
+    "%",
+    "prisões/100 mil habitantes"
+  ),
+  check.names = FALSE
+)
+
+knitr::kable(tab_var, format = "pipe")
+```
+
+Table: (#tab:variaveis) Variáveis da base de dados `USArrests`, descrição e unidade de medida.
+
+## Análise exploratória
+
+A Tabela \ref{tab:descritivas} apresenta as estatísticas descritivas das variáveis da base `USArrests`.
+
+```{r descritivas}
+descritivas <- data.frame(
+  Variável = c("Murder", "Assault", "UrbanPop", "Rape"),
+  Média = sapply(dados, mean),
+  `Desvio-padrão` = sapply(dados, sd)
+)
+
+knitr::kable(
+  descritivas,
+  format = "pipe",
+  digits = 2,
+  caption="\\label{tab:descritivas} Média e desvio-padrão (dp) das variáveis da base USArrests."
+)
+```
+
+A Figura \ref{fig:boxplots} apresenta os box-plots das variáveis da base. Observa-se que `Assault` e `Rape` apresentam maior dispersão dos dados, enquanto `UrbanPop` possui distribuição mais concentrada. Além disso, algumas variáveis apresentam observações mais afastadas da maior parte dos dados, indicando possíveis valores extremos.
+
+```{r boxplots, fig.cap="\\label{fig:boxplots} Box-plots das variáveis da base USArrests.", fig.width=7, fig.height=5}
+
+library(tidyr)
+
+dados_long <- tidyr::pivot_longer(
+  dados,
+  cols = everything(),
+  names_to = "Variavel",
+  values_to = "Valor"
+)
+
+ggplot(dados_long,
+       aes(x = Variavel,
+           y = Valor,
+           fill = Variavel)) +
+  geom_boxplot(show.legend = FALSE) +
+  labs(x = "Variável",
+       y = "Valor")
+```
+
+### Análise de correlação
+
+A Figura \ref{fig:corrplot} apresenta a matriz de correlações entre as quatro variáveis da base.
+
+```{r corrplot, fig.cap="\\label{fig:corrplot} Matriz de correlações entre as variáveis da base USArrests.", fig.width=4.5, fig.height=4.5, out.width="65%"}
+
+corrplot::corrplot(
+  cor(dados),
+  method = "ellipse",
+  type = "upper",
+  addCoef.col = "black",
+  tl.col = "black",
+  tl.srt = 45,
+  number.cex = 0.8
+)
+```
+
+Com relação à análise de correlação, espera-se que as variáveis explicativas apresentem correlação com a variável resposta `Assault`, mas que as correlações entre as próprias variáveis explicativas não sejam excessivamente elevadas, pois isso pode indicar multicolinearidade. Como regra geral, correlações absolutas superiores a 0,8 merecem atenção.
+
+Examinando a Figura \ref{fig:corrplot}, observa-se que:
+
+1. A variável resposta `Assault` apresenta correlação positiva com `Murder` e `Rape`, indicando que estados com maiores índices de prisões por assassinato e estupro tendem também a apresentar maiores índices de prisões por assalto.
+
+2. A variável `UrbanPop` apresenta correlação mais fraca com as demais variáveis, sugerindo menor associação linear com os índices de criminalidade.
+
+3. As correlações entre as variáveis explicativas (`Murder`, `UrbanPop` e `Rape`) serão avaliadas juntamente com o VIF para verificar a existência de multicolinearidade.
+
+### Multicolinearidade: o VIF
+
+Para quantificar a multicolinearidade sugerida pela análise de correlação, ajustamos um modelo inicial considerando `Assault` como variável resposta e `Murder`, `UrbanPop` e `Rape` como variáveis explicativas.
+
+```{r modeloInicial, results='asis'}
+modelo1 <- lm(Assault ~ Murder + UrbanPop + Rape, data = dados)
+
+tabela_coeficientes(modelo1)
+```
+
+Table: (\#tab:coefInicial) Estimativas dos coeficientes do modelo inicial.
+
+```{r vifCompleto, results='asis'}
+tab_vif <- data.frame(
+  Variável = names(vif_manual(modelo1)),
+  VIF = round(vif_manual(modelo1),2)
+)
+
+knitr::kable(
+  tab_vif,
+  format="pipe",
+  row.names = FALSE
+)
+```
+
+Table: (\#tab:vifCompleto) Fator de inflação de variância (VIF) das variáveis explicativas.
+
+O modelo inicial será avaliado por meio do coeficiente de determinação ajustado, da significância dos coeficientes e dos valores de VIF. Valores de VIF superiores a 5 indicam possível multicolinearidade, enquanto valores acima de 10 caracterizam um problema mais severo. Caso seja identificada multicolinearidade relevante, será realizada a seleção de um modelo mais adequado antes da análise dos pressupostos.
+
+
+## Seleção do modelo final
+
+
+
+### Seleção automática via `step`
+
+
+
+## Diagnóstico do modelo selecionado
+
+
+
+### Identificação de pontos atípicos, de alavanca e influentes
+
+
+
+### Impacto da remoção dos pontos influentes
+
+
+
+## Interpretações do modelo selecionado
+
+
+
+### Coeficientes padronizados
+
+
+
+## Regressão com variáveis dummy (a espécie como explicativa)
+
+
+
+### Modelo sem `Petal.Length`, com a espécie
+
+
+
+### Alterando a categoria de referência
+
+
+
+## Comparação geral dos modelos
+
+
+
+
+
+# Previsões
+
+
+
+## Intervalo de confiança para o valor médio esperado
+
+
+
+## Intervalo de predição para uma nova observação
+
+
+
+
+
+# Conclusão
+
+

@@ -1,0 +1,499 @@
+---
+title: Modelagem do Comprimento da Sépala em Flores do Gênero Iris
+
+# informacoes da disciplina, exibidas no cabecalho do artigo
+disciplina: "Estatística Aplicada"
+periodo: "2026.1"
+professores:
+  - "Profa. Dra. Amanda Gomes"
+  - "Prof. Dr. Jerfson Bruno"
+  - "Prof. Dr. Gilberto Matos"
+
+# use letras para afiliacao
+# substitua "[Nome do Aluno]" pelos nomes dos ate 3 integrantes da equipe
+author:
+  - name: "[Nome do Aluno]"
+    affiliation: a
+  - name: "[Nome do Aluno]"
+    affiliation: a
+  - name: "[Nome do Aluno]"
+    affiliation: a
+address:
+  - code: a
+    address: Departamento de Ciência da Computação - UFCG
+
+# area do conhecimento (pelo menos uma)
+subject:
+  - "estatistica aplicada"
+  - "modelagem preditiva"
+
+# palavras-chave
+keywords:
+  - regressao linear multipla # coloque o principal metodo estatistico utilizado como primeira palavra chave a fim de facilitar a catalogacao do LEA
+  - multicolinearidade
+  - selecao de modelos
+  - iris
+  - variaveis dummy
+  - diagnostico de residuos
+
+# resumo - note a barra vertical e os dois espaços no início do parágrafo
+abstract: |
+  Este trabalho aplica a metodologia de regressão linear múltipla (MRLM) ao clássico conjunto de dados Iris, coletado por Anderson e popularizado por Fisher, com o objetivo de modelar o comprimento da sépala a partir das demais variáveis morfológicas e da espécie da flor. Após uma análise exploratória uni e bivariada, incluindo correlações, box-plots e verificação de dados ausentes, ajustamos um modelo inicial com todas as variáveis morfológicas contínuas e identificamos multicolinearidade severa entre o comprimento e a largura da pétala. Comparamos modelos candidatos por AIC, BIC e teste F, selecionamos um modelo final e verificamos seus pressupostos através de análise de resíduos, gráfico de envelope simulado e identificação de pontos atípicos, de alavanca e influentes. Em seguida, incorporamos a espécie como variável qualitativa (dummy), discutindo a codificação por categoria de referência e o efeito de sua alteração sobre a interpretação dos coeficientes. Por fim, para dois conjuntos de valores das variáveis explicativas, apresentamos os intervalos de confiança para o valor médio esperado da variável resposta e os intervalos de predição para novas observações, com interpretação prática de ambos.
+
+# arquivo com a bibliografia do relatorio
+bibliography: modeloUFCG.bib
+
+output:
+  bookdown::pdf_book:
+    base_format: modeloUFCG::modeloUFCG
+    includes:
+      after_body: orientacoes.tex
+---
+
+
+```{r definicoes, include=FALSE, message=FALSE, warning=FALSE}
+# pacotes a serem carregados para a analise
+library(ggplot2)
+theme_set(theme_bw())
+library(ggfortify)
+library(GGally)
+library(corrplot)
+library(broom)
+library(hnp)
+
+# definicoes globais
+knitr::opts_chunk$set(
+  fig.width = 5, fig.height = 4, out.width = "100%",
+  echo = FALSE, message = FALSE, warning = FALSE,
+  fig.pos = 'H'
+)
+
+dados <- iris
+
+# funcao auxiliar: grafico de envelope simulado, silenciando mensagens do pacote hnp
+grafico_envelope <- function(modelo, seed = 1) {
+  set.seed(seed)
+  invisible(capture.output(
+    h <- hnp(modelo, halfnormal = FALSE, verb.sim = FALSE, plot.sim = FALSE)
+  ))
+  plot(h, xlab = "Quantis teóricos N(0,1)", ylab = "Resíduos",
+       main = "")
+}
+
+# funcao auxiliar: tabela de coeficientes formatada
+tabela_coeficientes <- function(modelo, digitos = 4) {
+  tab <- broom::tidy(modelo)
+  tab$term <- gsub("Species", "Espécie: ", tab$term)
+  tab$term <- gsub("\\(Intercept\\)", "Intercepto", tab$term)
+  names(tab) <- c("Termo", "Estimativa", "Erro Padrão", "Estatística t", "p-valor")
+  knitr::kable(tab, format = "pipe", digits = digitos)
+}
+
+# funcao auxiliar: fator de inflacao de variancia (VIF), sem depender do pacote car
+vif_manual <- function(modelo) {
+  X <- model.matrix(modelo)[, -1, drop = FALSE]
+  sapply(colnames(X), function(cn) {
+    y <- X[, cn]
+    x <- X[, colnames(X) != cn, drop = FALSE]
+    r2 <- summary(lm(y ~ x))$r.squared
+    1 / (1 - r2)
+  })
+}
+```
+
+
+
+# Introdução
+
+A relação entre as dimensões florais e a espécie constitui um dos exemplos mais estudados de discriminação morfológica em Botânica, desde os trabalhos pioneiros de Anderson \cite{Anderson1935} e Fisher \cite{Fisher1936} com flores do gênero Iris. O conjunto de dados resultante, com 150 observações de três espécies (*setosa*, *versicolor* e *virginica*) e quatro medidas morfológicas (comprimento e largura da sépala, comprimento e largura da pétala), tornou-se um caso clássico para ilustrar técnicas de modelagem estatística.
+
+Neste trabalho, o objetivo é modelar o **comprimento da sépala** (`Sepal.Length`) a partir das demais variáveis morfológicas e da espécie da flor. Este problema é particularmente interessante do ponto de vista didático, pois o conjunto de dados apresenta um desafio comum a muitos estudos aplicados: a presença de variáveis explicativas fortemente correlacionadas entre si, o que exige diagnóstico cuidadoso de multicolinearidade antes de qualquer conclusão sobre o efeito individual de cada variável.
+
+Especificamente, buscamos: (i) descrever a base de dados e realizar uma análise exploratória uni e bivariada; (ii) ajustar um modelo inicial com todas as variáveis morfológicas contínuas e diagnosticar multicolinearidade; (iii) selecionar, por meio de critérios estatísticos (AIC, BIC e teste F), um modelo final livre de multicolinearidade relevante; (iv) verificar os pressupostos do MRLM sobre este modelo, resolvendo as violações identificadas; (v) incorporar a espécie como variável qualitativa e discutir a codificação por variáveis dummy e o papel da categoria de referência; e (vi) apresentar, para dois conjuntos de valores das variáveis explicativas, os intervalos de confiança para o valor médio esperado da resposta e os intervalos de predição para novas observações.
+
+
+
+# Metodologia
+
+Os dados foram coletados na Península de Gaspé, Canadá \cite{Anderson1935}, com 50 observações por espécie, totalizando 150 flores, sem valores ausentes. A análise exploratória compreendeu estatísticas descritivas, matriz de correlações, box-plots por espécie e matriz de dispersão par a par.
+
+## Modelo de regressão linear múltipla
+
+Seja $y_i$ o comprimento da sépala da $i$-ésima flor. O modelo inicial, com todas as variáveis morfológicas contínuas como explicativas (sem a espécie), é dado por
+
+$$y_i = \beta_0 + \beta_1\,\text{largSepala}_i + \beta_2\,\text{compPetala}_i + \beta_3\,\text{largPetala}_i + \varepsilon_i,$$
+
+\noindent em que $\varepsilon_i$ segue as suposições usuais do MRLM \cite{Kutner2004}: média nula, variância constante, independência e normalidade.
+
+A multicolinearidade entre as variáveis explicativas foi avaliada por dois critérios complementares: (a) a matriz de correlações entre as variáveis preditoras, em que valores absolutos de correlação $\geq 0{,}8$ (ou $0{,}9$) são indicativos de possível multicolinearidade; e (b) o fator de inflação de variância, $\text{VIF}_j = 1/(1-R_j^2)$, em que $R_j^2$ é o coeficiente de determinação da regressão de $X_j$ sobre as demais explicativas, sendo $\text{VIF}_j > 10$ indicativo de multicolinearidade severa e $\text{VIF}_j > 5$ já considerado potencialmente problemático \cite{Kutner2004}.
+
+A seleção do modelo entre os candidatos foi conduzida por meio de três instrumentos: o Critério de Informação de Akaike \cite{Akaike1974}, $\text{AIC} = -2\log(\hat L) + 2k$; o Critério de Informação Bayesiano \cite{Schwarz1978}, $\text{BIC} = -2\log(\hat L) + k\log(n)$, que penaliza a complexidade do modelo mais fortemente que o AIC; e o teste $F$ de comparação entre modelos aninhados. Em ambos os critérios de informação, o modelo com menor valor é o preferível, e uma diferença superior a 10 entre os valores é usualmente considerada evidência forte de uma real diferença de qualidade entre os modelos. Complementarmente, aplicamos o procedimento *stepwise* automático (`step`, baseado em AIC) ao modelo inicial, para contrastar a seleção automática com a escolha orientada por interpretabilidade.
+
+## Diagnóstico do modelo
+
+A adequação do modelo selecionado foi avaliada por meio de análise gráfica dos resíduos (resíduos versus ajustados, quantil-quantil, escala-localização e alavancagem), do gráfico de envelope simulado (99 simulações, banda de confiança para o quantil-quantil dos resíduos) e da identificação de observações atípicas ($|t_i| > 2$), de alavanca ($h_{ii} > 2p/n$) e influentes (distância de Cook $D_i > 4/n$; \cite{Cook1977,CookWeisberg1982,Kutner2004}). As observações influentes foram removidas e o modelo reajustado, comparando-se as estimativas resultantes com as do modelo original.
+
+Para comparar a importância relativa das variáveis explicativas, medidas em escalas distintas, calculamos também os coeficientes padronizados do modelo selecionado, obtidos ajustando o modelo sobre as variáveis previamente padronizadas (média 0, desvio-padrão 1).
+
+## Variáveis dummy e categoria de referência
+
+Como a espécie é uma variável categórica com três níveis, sua inclusão em um MRLM exige a criação de variáveis indicadoras (*dummy*, também chamadas fictícias ou *one-hot encoding*): uma categoria é escolhida como referência e as demais $k-1$ categorias são representadas por variáveis binárias. A categoria de referência não recebe coeficiente próprio; seu efeito fica embutido no intercepto, e os coeficientes das demais categorias representam o desvio médio em relação a ela. Discutimos como a escolha da categoria de referência altera a interpretação dos coeficientes, mas não os valores preditos pelo modelo.
+
+## Inferência preditiva
+
+Para um vetor de valores das variáveis explicativas $\mathbf{x}_h$, distinguem-se dois tipos de inferência \cite{Kutner2004}: o **intervalo de confiança** para o valor médio esperado da resposta, $\text{E}(Y_h\mid\mathbf{x}_h)$, que estima a média da resposta para a subpopulação com aquelas características; e o **intervalo de predição** para uma **nova observação individual**, $Y_h$, necessariamente mais largo, pois soma à incerteza sobre a média a variabilidade individual em torno dela. Ambos foram calculados para dois conjuntos hipotéticos de valores das variáveis explicativas, dentro do intervalo observado nos dados.
+
+
+
+# Resultados
+
+## Descrição da base de dados
+
+A base `iris` possui $n = 150$ observações e 5 variáveis (Tabela \ref{tab:variaveis}), sem valores ausentes.
+
+```{r variaveis, results='asis'}
+tab_var <- data.frame(
+  Variável = c("Sepal.Length", "Sepal.Width", "Petal.Length", "Petal.Width", "Species"),
+  Descrição = c("Comprimento da sépala (variável resposta)", "Largura da sépala",
+                "Comprimento da pétala", "Largura da pétala",
+                "Espécie da flor (setosa, versicolor, virginica)"),
+  Unidade = c("cm", "cm", "cm", "cm", "categórica"),
+  check.names = FALSE
+)
+knitr::kable(tab_var, format = "pipe")
+```
+Table: (\#tab:variaveis) Variáveis da base de dados `iris`, descrição e unidade de medida.
+
+## Análise exploratória
+
+A Tabela \ref{tab:descritivas} apresenta as estatísticas descritivas das variáveis morfológicas, por espécie.
+
+```{r descritivas}
+descritivas <- aggregate(
+  cbind(Sepal.Length, Sepal.Width, Petal.Length, Petal.Width) ~ Species,
+  data = dados, FUN = function(x) c(media = mean(x), dp = sd(x))
+)
+descritivas <- do.call(data.frame, descritivas)
+names(descritivas) <- c("Espécie", "Comp. Sépala (média)", "Comp. Sépala (dp)",
+                        "Larg. Sépala (média)", "Larg. Sépala (dp)",
+                        "Comp. Pétala (média)", "Comp. Pétala (dp)",
+                        "Larg. Pétala (média)", "Larg. Pétala (dp)")
+knitr::kable(descritivas, format = "pipe", digits = 2,
+             caption = "\\label{tab:descritivas} Média e desvio-padrão (dp) das variáveis morfológicas, por espécie.")
+```
+
+A Figura \ref{fig:boxplots} evidencia separação quase completa entre as espécies no comprimento e na largura da pétala, com maior sobreposição nas variáveis da sépala, sobretudo em `Sepal.Width`. Isto sugere que a pétala é a região morfológica mais discriminante entre as espécies, enquanto o comprimento da sépala (nossa variável resposta) varia de forma mais gradual entre elas.
+
+```{r boxplots, fig.cap="\\label{fig:boxplots} Box-plots das variáveis morfológicas, por espécie.", fig.width=7, fig.height=5}
+iris_long <- data.frame(
+  Species = rep(dados$Species, 4),
+  Variavel = factor(rep(c("Sepal.Length", "Sepal.Width", "Petal.Length", "Petal.Width"), each = nrow(dados)),
+                     levels = c("Sepal.Length", "Sepal.Width", "Petal.Length", "Petal.Width")),
+  Valor = c(dados$Sepal.Length, dados$Sepal.Width, dados$Petal.Length, dados$Petal.Width)
+)
+ggplot(iris_long, aes(x = Species, y = Valor, fill = Species)) +
+  geom_boxplot(show.legend = FALSE) +
+  facet_wrap(~Variavel, scales = "free_y") +
+  labs(x = "Espécie", y = "Valor (cm)")
+```
+
+### Análise de correlação
+
+A Figura \ref{fig:corrplot} exibe a matriz de correlações entre as quatro variáveis morfológicas, e a Figura \ref{fig:ggpairs} apresenta a matriz de dispersão par a par, estratificada por espécie.
+
+```{r corrplot, fig.cap="\\label{fig:corrplot} Matriz de correlações entre as variáveis morfológicas.", fig.width=4.5, fig.height=4.5, out.width="65%"}
+corrplot::corrplot(
+  cor(dados[, 1:4]), method = "ellipse", type = "upper",
+  addCoef.col = "black", tl.col = "black", tl.srt = 45, number.cex = 0.8
+)
+```
+
+```{r ggpairs, fig.cap="\\label{fig:ggpairs} Matriz de dispersão par a par das variáveis morfológicas, por espécie.", fig.width=7, fig.height=6}
+GGally::ggpairs(
+  dados, columns = 1:4, mapping = ggplot2::aes(colour = Species, alpha = 0.6),
+  upper = list(continuous = GGally::wrap("cor", size = 3)),
+  lower = list(continuous = GGally::wrap("points", size = 0.8))
+) + theme_bw(base_size = 8)
+```
+
+Com relação à análise de correlação, é desejável observar altas correlações das variáveis explicativas com a variável resposta `Sepal.Length`, mas correlações altas *entre* as próprias variáveis explicativas são um indício de multicolinearidade. Como regra geral, correlações absolutas $\geq 0{,}8$ ou $\geq 0{,}9$ entre preditoras são consideradas indício relevante. Examinando a Figura \ref{fig:corrplot} em detalhe:
+
+1. A variável resposta `Sepal.Length`:
+    i. não apresenta correlação linear significante com `Sepal.Width` ($r=-0{,}118$, $p=0{,}152$);
+    ii. apresenta correlação linear forte e significante com `Petal.Length` ($r=0{,}872$, $p<0{,}001$);
+    iii. apresenta correlação linear forte e significante com `Petal.Width` ($r=0{,}818$, $p<0{,}001$).
+2. Entre as variáveis explicativas, `Sepal.Width` correlaciona-se de forma moderada e significante, porém negativa, com `Petal.Length` ($r=-0{,}428$, $p<0{,}001$) e com `Petal.Width` ($r=-0{,}366$, $p<0{,}001$). Como nenhuma destas correlações ultrapassa, em valor absoluto, o limiar de $0{,}8$, elas não configuram, isoladamente, indício forte de multicolinearidade.
+3. Já `Petal.Length` e `Petal.Width` apresentam correlação **muito forte e positiva** entre si ($r=0{,}963$, $p<0{,}001$), bem acima do limiar de referência. Isto configura um indício claro de multicolinearidade entre estas duas variáveis explicativas, que será confirmado adiante pelo VIF.
+
+### Multicolinearidade: o VIF
+
+Para quantificar formalmente a multicolinearidade sugerida pela análise de correlação, ajustamos um modelo inicial com as três variáveis explicativas contínuas (sem a espécie) e calculamos o VIF de cada uma (Tabela \ref{tab:vifCompleto}).
+
+```{r modeloInicial, results='asis'}
+modelo1 <- lm(Sepal.Length ~ Sepal.Width + Petal.Length + Petal.Width, data = dados)
+tabela_coeficientes(modelo1)
+```
+Table: (\#tab:coefInicial) Estimativas dos coeficientes do modelo inicial (sem a espécie).
+
+```{r vifCompleto, results='asis'}
+tab_vif <- data.frame(
+  Variável = names(vif_manual(modelo1)),
+  VIF = round(vif_manual(modelo1), 2)
+)
+knitr::kable(tab_vif, format = "pipe", row.names = FALSE)
+```
+Table: (\#tab:vifCompleto) Fator de inflação de variância (VIF) de cada variável explicativa no modelo inicial.
+
+O modelo inicial apresenta ajuste elevado ($R^2$ ajustado $= `r round(summary(modelo1)$adj.r.squared, 4)`$) e todos os coeficientes são estatisticamente significantes. Entretanto, a Tabela \ref{tab:vifCompleto} confirma multicolinearidade severa: `Petal.Length` e `Petal.Width` apresentam VIF de aproximadamente `r round(vif_manual(modelo1)["Petal.Length"],1)` e `r round(vif_manual(modelo1)["Petal.Width"],1)`, respectivamente, muito acima do limiar de referência (10), enquanto `Sepal.Width` apresenta VIF baixo (`r round(vif_manual(modelo1)["Sepal.Width"],2)`).
+
+Há ainda um segundo indício, mais sutil, de que o problema é real: observando a Tabela \ref{tab:coefInicial}, o coeficiente de `Petal.Length` é positivo ($`r round(coef(modelo1)["Petal.Length"],3)`$), mas o coeficiente de `Petal.Width` é **negativo** ($`r round(coef(modelo1)["Petal.Width"],3)`$). Isto é contraintuitivo, já que estas duas variáveis se correlacionam de forma fortemente **positiva** entre si e com a resposta (Figura \ref{fig:corrplot}): seria esperado que ambas apresentassem efeito no mesmo sentido sobre `Sepal.Length`. Este sinal trocado é uma consequência típica da multicolinearidade, que torna as estimativas individuais dos coeficientes instáveis e pouco confiáveis, mesmo quando o ajuste global do modelo permanece bom.
+
+## Seleção do modelo final
+
+Como as variáveis problemáticas são `Petal.Length` e `Petal.Width`, ajustamos dois modelos candidatos, cada um excluindo uma delas do modelo inicial, e os comparamos por AIC, BIC e teste F (Tabela \ref{tab:selecaoModelos}).
+
+```{r modelosCandidatos, results='asis'}
+modelo2 <- update(modelo1, ~ . - Petal.Width)
+modelo3 <- update(modelo1, ~ . - Petal.Length)
+
+tab_selecao <- data.frame(
+  Modelo = c("modelo1 (completo)", "modelo2 (sem Petal.Width)", "modelo3 (sem Petal.Length)"),
+  `R² ajustado` = round(c(summary(modelo1)$adj.r.squared, summary(modelo2)$adj.r.squared, summary(modelo3)$adj.r.squared), 4),
+  AIC = round(c(AIC(modelo1), AIC(modelo2), AIC(modelo3)), 2),
+  BIC = round(c(BIC(modelo1), BIC(modelo2), BIC(modelo3)), 2),
+  check.names = FALSE
+)
+knitr::kable(tab_selecao, format = "pipe", row.names = FALSE)
+```
+Table: (\#tab:selecaoModelos) Comparação dos modelos candidatos: ajuste, AIC e BIC.
+
+O modelo2 (sem `Petal.Width`) apresenta AIC e BIC menores que o modelo3 (sem `Petal.Length`), com diferença muito superior a 10 em ambos os critérios, o que constitui evidência forte de que o modelo2 é preferível. Isto é coerente com a análise de correlação: `Petal.Width` apresenta correlação um pouco menor com a resposta ($r=0{,}818$) do que `Petal.Length` ($r=0{,}872$), de modo que, ao escolher qual das duas variáveis colineares remover, é preferível manter a que mais se relaciona com `Sepal.Length`.
+
+```{r anovaModelos, results='asis'}
+tab_anova2 <- broom::tidy(anova(modelo2, modelo1))
+tab_anova2$term <- c("modelo2", "modelo1")
+names(tab_anova2) <- c("Modelo", "GL Res.", "SQ Res.", "GL", "SQ", "Estatística F", "p-valor")
+for (col in c("GL", "SQ", "Estatística F", "p-valor")) {
+  tab_anova2[[col]] <- c("", format(round(tab_anova2[[col]][2], 4)))
+}
+knitr::kable(tab_anova2, format = "pipe", digits = 4, row.names = FALSE)
+```
+Table: (\#tab:anovaModelo2) Teste F comparando o modelo2 ao modelo completo (modelo1).
+
+```{r anovaModelos3, results='asis'}
+tab_anova3 <- broom::tidy(anova(modelo3, modelo1))
+tab_anova3$term <- c("modelo3", "modelo1")
+names(tab_anova3) <- c("Modelo", "GL Res.", "SQ Res.", "GL", "SQ", "Estatística F", "p-valor")
+for (col in c("GL", "SQ", "Estatística F", "p-valor")) {
+  tab_anova3[[col]] <- c("", format(round(tab_anova3[[col]][2], 4)))
+}
+knitr::kable(tab_anova3, format = "pipe", digits = 4, row.names = FALSE)
+```
+Table: (\#tab:anovaModelo3) Teste F comparando o modelo3 ao modelo completo (modelo1).
+
+Em ambos os testes F, rejeita-se a hipótese nula de que o submodelo (sem a variável removida) explica tão bem quanto o modelo completo ($p<0{,}001$). Ou seja, tanto `Petal.Width` quanto `Petal.Length`, isoladamente, são estatisticamente significantes para a regressão, ainda que a presença simultânea de ambas cause o problema de multicolinearidade discutido anteriormente.
+
+### Seleção automática via `step`
+
+Por completeza, aplicamos também a seleção automática *stepwise* baseada em AIC ao modelo inicial:
+
+```{r stepwise, echo=TRUE}
+step(modelo1, trace = 1)
+```
+
+Note que o procedimento *stepwise* **mantém todas as três variáveis**, isto é, não recomenda a remoção de `Petal.Width` nem de `Petal.Length`: do ponto de vista puramente preditivo (menor AIC), a variável adicional sempre contribui, mesmo colinear. Isto ilustra um ponto importante: o AIC penaliza apenas a complexidade do modelo, não a multicolinearidade em si. Como nosso objetivo inclui **interpretar** de forma prática o efeito de cada variável, e não apenas maximizar o ajuste preditivo, optamos por seguir com o **modelo2**, que resolve o problema de multicolinearidade a um custo mínimo de ajuste (Tabela \ref{tab:selecaoModelos}).
+
+## Diagnóstico do modelo selecionado
+
+A Tabela \ref{tab:coefModelo2} apresenta as estimativas do modelo2, o modelo selecionado para verificação dos pressupostos.
+
+```{r modelo2Coef, results='asis'}
+tabela_coeficientes(modelo2)
+```
+Table: (\#tab:coefModelo2) Estimativas dos coeficientes do modelo2 (modelo selecionado).
+
+```{r diagnosticoModelo2, fig.cap="\\label{fig:diagnosticoModelo2} Análise de resíduos do modelo2.", fig.width=6, fig.height=5}
+autoplot(modelo2)
+```
+
+```{r envelopeModelo2, fig.cap="\\label{fig:envelopeModelo2} Gráfico de envelope simulado do modelo2.", fig.width=5, fig.height=4.5, out.width="65%"}
+grafico_envelope(modelo2)
+```
+
+As Figuras \ref{fig:diagnosticoModelo2} e \ref{fig:envelopeModelo2} não indicam padrões sistemáticos relevantes nos resíduos, e a grande maioria dos pontos permanece dentro da banda do envelope simulado, dando suporte às suposições de linearidade, variância constante e normalidade dos erros.
+
+### Identificação de pontos atípicos, de alavanca e influentes
+
+```{r pontosInfluentes, results='asis'}
+n <- nrow(dados)
+p <- length(coef(modelo2))
+hat <- hatvalues(modelo2)
+cook <- cooks.distance(modelo2)
+rst <- rstudent(modelo2)
+
+flag <- which(abs(rst) > 2 | hat > 2 * p / n | cook > 4 / n)
+tab_flag <- data.frame(
+  Observação = flag,
+  Espécie = dados$Species[flag],
+  `Resíduo estud.` = round(rst[flag], 2),
+  Alavancagem = round(hat[flag], 3),
+  `Dist. de Cook` = round(cook[flag], 4),
+  Atípico = ifelse(abs(rst[flag]) > 2, "Sim", "Não"),
+  Alavanca = ifelse(hat[flag] > 2 * p / n, "Sim", "Não"),
+  Influente = ifelse(cook[flag] > 4 / n, "Sim", "Não"),
+  check.names = FALSE
+)
+tab_flag <- tab_flag[order(-tab_flag$`Dist. de Cook`), ]
+knitr::kable(tab_flag, format = "pipe", row.names = FALSE)
+```
+Table: (\#tab:pontosInfluentes) Observações atípicas, de alavanca e/ou influentes segundo o modelo2.
+
+Com $n = 150$ observações e $p = `r p`$ parâmetros, o limiar de alavanca é $2p/n \approx `r round(2*p/n,3)`$ e o de influência (Cook) é $4/n \approx `r round(4/n,3)`$. Ao todo, `r length(flag)` observações (`r round(100*length(flag)/n,1)`%) violam pelo menos um dos critérios, e `r sum(cook > 4/n)` são influentes pela distância de Cook.
+
+### Impacto da remoção dos pontos influentes
+
+```{r modeloRefinado, results='asis'}
+influentes <- which(cook > 4 / n)
+modelo2_refinado <- lm(formula(modelo2), data = dados[-influentes, ])
+
+comp <- data.frame(
+  Termo = names(coef(modelo2)),
+  `modelo2 (completo)` = round(coef(modelo2), 3),
+  `modelo2 (refinado)` = round(coef(modelo2_refinado), 3),
+  `Diferença (%)` = round(100 * (coef(modelo2_refinado) - coef(modelo2)) / coef(modelo2), 2),
+  check.names = FALSE
+)
+knitr::kable(comp, format = "pipe", row.names = FALSE)
+```
+Table: (\#tab:comparaCoef) Comparação das estimativas antes e depois da remoção dos pontos influentes.
+
+Removendo as `r sum(cook > 4/n)` observações influentes, o coeficiente de determinação ajustado aumenta de `r round(summary(modelo2)$adj.r.squared,3)` para `r round(summary(modelo2_refinado)$adj.r.squared,3)`, e o erro padrão residual diminui de `r round(summary(modelo2)$sigma,3)` para `r round(summary(modelo2_refinado)$sigma,3)`. As variações nos coeficientes são modestas, indicando que as observações influentes refletem variabilidade natural dos dados e não erros de medição. Como a diferença nas estimativas é pequena e os pressupostos já eram atendidos pelo modelo2 completo, optamos por manter todas as observações no modelo final utilizado nas próximas seções, evitando descartar informação sem evidência de erro.
+
+## Interpretações do modelo selecionado
+
+O modelo2 explica uma proporção estatisticamente significante e substancial da variância de `Sepal.Length` ($R^2$ ajustado $= `r round(summary(modelo2)$adj.r.squared, 3)`$; $F(2, `r df.residual(modelo2)`) = `r round(summary(modelo2)$fstatistic[1],1)`$, $p<0{,}001$). Especificamente:
+
+- para cada aumento de 1 cm na largura da sépala (`Sepal.Width`), mantendo `Petal.Length` constante, o comprimento médio esperado da sépala aumenta em $`r round(coef(modelo2)["Sepal.Width"],3)`$ cm;
+- para cada aumento de 1 cm no comprimento da pétala (`Petal.Length`), mantendo `Sepal.Width` constante, o comprimento médio esperado da sépala aumenta em $`r round(coef(modelo2)["Petal.Length"],3)`$ cm.
+
+Note que ambos os efeitos são agora positivos e coerentes com a análise de correlação, ao contrário do que ocorria no modelo inicial com as três variáveis contínuas (Tabela \ref{tab:coefInicial}), confirmando que a remoção de `Petal.Width` resolveu a instabilidade causada pela multicolinearidade.
+
+### Coeficientes padronizados
+
+Como as variáveis explicativas deste modelo estão na mesma unidade (cm), a comparação direta dos coeficientes já é informativa; ainda assim, calculamos os coeficientes padronizados para ilustrar a técnica, útil em modelos com variáveis em escalas distintas.
+
+```{r padronizados, echo=TRUE}
+lm.beta::lm.beta(modelo2)
+```
+
+Os coeficientes padronizados indicam que `Petal.Length` (beta padronizado $\approx `r round(lm.beta::lm.beta(modelo2)$standardized.coefficients["Petal.Length"],2)`$) tem peso relativo consideravelmente maior do que `Sepal.Width` (beta padronizado $\approx `r round(lm.beta::lm.beta(modelo2)$standardized.coefficients["Sepal.Width"],2)`$) na explicação do comprimento da sépala, uma vez colocadas na mesma escala.
+
+## Regressão com variáveis dummy (a espécie como explicativa)
+
+Até aqui, o modelo selecionado não incluiu a espécie da flor. Nesta seção, avaliamos o efeito de incorporá-la como variável qualitativa. Como `Species` possui três categorias, o R a codifica automaticamente como duas variáveis dummy, tomando a primeira categoria em ordem alfabética (*setosa*) como referência:
+
+```{r dummies, echo=TRUE}
+levels(dados$Species)
+head(model.matrix(~Species, data = dados)[, -1])
+```
+
+Ou seja, uma observação é codificada como $(0, 0)$ se for *setosa*, $(1, 0)$ se for *versicolor* e $(0, 1)$ se for *virginica*. O coeficiente do intercepto absorve o efeito da categoria de referência, e os coeficientes das demais dummies representam o desvio médio em relação a ela.
+
+```{r modeloComEspecie, results='asis'}
+modelo4 <- lm(Sepal.Length ~ Sepal.Width + Petal.Length + Species, data = dados)
+tabela_coeficientes(modelo4)
+```
+Table: (\#tab:coefModelo4) Estimativas do modelo com `Sepal.Width`, `Petal.Length` e `Species`.
+
+Ao incluir a espécie, os coeficientes de `Speciesversicolor` e `Speciesvirginica` são **negativos** ($`r round(coef(modelo4)["Speciesversicolor"],3)`$ e $`r round(coef(modelo4)["Speciesvirginica"],3)`$, respectivamente), sugerindo que estas espécies teriam sépalas mais curtas do que a *setosa* quando comparadas a igual `Petal.Length` e `Sepal.Width`. Esta interpretação é contraintuitiva e vai de encontro à análise exploratória (Figura \ref{fig:boxplots}), na qual `Sepal.Length` é claramente maior, em média, para *virginica* e *versicolor* do que para *setosa*. A causa mais provável é, novamente, a multicolinearidade: `Petal.Length` está fortemente associada à espécie (Figura \ref{fig:ggpairs}), de modo que as duas variáveis competem para explicar a mesma variabilidade, distorcendo os coeficientes.
+
+### Modelo sem `Petal.Length`, com a espécie
+
+Para obter uma interpretação mais confiável do efeito da espécie, ajustamos um modelo alternativo sem `Petal.Length`:
+
+```{r modeloSemPetalLength, results='asis'}
+modelo5 <- lm(Sepal.Length ~ Sepal.Width + Species, data = dados)
+tabela_coeficientes(modelo5)
+```
+Table: (\#tab:coefModelo5) Estimativas do modelo com `Sepal.Width` e `Species` (sem `Petal.Length`).
+
+Agora os coeficientes de `Speciesversicolor` ($`r round(coef(modelo5)["Speciesversicolor"],3)`$) e `Speciesvirginica` ($`r round(coef(modelo5)["Speciesvirginica"],3)`$) são positivos e coerentes com a análise exploratória: mantendo `Sepal.Width` fixo, uma flor *virginica* tem, em média, sépala $`r round(coef(modelo5)["Speciesvirginica"],2)`$ cm mais comprida do que uma *setosa*, e uma *versicolor* tem sépala $`r round(coef(modelo5)["Speciesversicolor"],2)`$ cm mais comprida do que uma *setosa*. Este modelo tem, no entanto, $R^2$ ajustado de $`r round(summary(modelo5)$adj.r.squared,4)`$, inferior ao do modelo2 ($`r round(summary(modelo2)$adj.r.squared,4)`$), evidenciando o compromisso entre poder explicativo e interpretabilidade quando há multicolinearidade entre uma variável contínua e uma categórica.
+
+### Alterando a categoria de referência
+
+Por padrão, o R escolhe a primeira categoria em ordem alfabética (*setosa*) como referência. Isto pode ser alterado com `relevel()`, por exemplo, para tornar *virginica* a referência:
+
+```{r releveling, echo=TRUE}
+dados_relevel <- dados
+dados_relevel$Species <- relevel(dados_relevel$Species, "virginica")
+modelo6 <- lm(Sepal.Length ~ Sepal.Width + Species, data = dados_relevel)
+summary(modelo6)$coefficients
+```
+
+Os valores preditos pelo modelo **não se alteram** com a troca de categoria de referência, apenas a forma de interpretar os coeficientes. Agora, o coeficiente de `Speciessetosa` ($`r round(coef(modelo6)["Speciessetosa"],3)`$) indica que a sépala da *setosa* é, em média, `r abs(round(coef(modelo6)["Speciessetosa"],2))` cm mais curta do que a da *virginica* (categoria de referência), e o coeficiente de `Speciesversicolor` ($`r round(coef(modelo6)["Speciesversicolor"],3)`$) indica que a *versicolor* também tem sépala mais curta do que a *virginica*, porém em menor magnitude. Esta é a mesma informação do modelo anterior, apenas reorganizada em torno de outra categoria de referência.
+
+## Comparação geral dos modelos
+
+A Tabela \ref{tab:comparaModelos} resume as medidas de ajuste de todos os modelos considerados.
+
+```{r comparaModelosGeral, results='asis'}
+tab_geral <- data.frame(
+  Modelo = c("modelo1 (completo, sem espécie)", "modelo2 (sem Petal.Width)", "modelo3 (sem Petal.Length)",
+             "modelo4 (com espécie e Petal.Length)", "modelo5 (com espécie, sem Petal.Length)"),
+  n = c(nobs(modelo1), nobs(modelo2), nobs(modelo3), nobs(modelo4), nobs(modelo5)),
+  `R² ajustado` = round(c(summary(modelo1)$adj.r.squared, summary(modelo2)$adj.r.squared, summary(modelo3)$adj.r.squared,
+                           summary(modelo4)$adj.r.squared, summary(modelo5)$adj.r.squared), 3),
+  AIC = round(c(AIC(modelo1), AIC(modelo2), AIC(modelo3), AIC(modelo4), AIC(modelo5)), 2),
+  check.names = FALSE
+)
+knitr::kable(tab_geral, format = "pipe", row.names = FALSE)
+```
+Table: (\#tab:comparaModelos) Comparação das medidas de ajuste entre todos os modelos considerados.
+
+O modelo2 permanece o melhor modelo em termos de AIC e simplicidade de interpretação, sendo, portanto, o modelo utilizado na etapa de previsões a seguir.
+
+
+
+# Previsões
+
+Para realizar previsões, é recomendável utilizar valores das variáveis explicativas dentro do intervalo observado nos dados (Tabela \ref{tab:descritivas}). Utilizando o modelo2, apresentamos as previsões para dois conjuntos hipotéticos: $\mathbf{x}_1$, com largura de sépala de 2,8 cm e comprimento de pétala de 1,5 cm; e $\mathbf{x}_2$, com largura de sépala de 3,2 cm e comprimento de pétala de 5,0 cm.
+
+## Intervalo de confiança para o valor médio esperado
+
+```{r previsaoConfianca, results='asis'}
+novos_dados <- data.frame(
+  Sepal.Width = c(2.8, 3.2),
+  Petal.Length = c(1.5, 5.0)
+)
+ic <- predict(modelo2, newdata = novos_dados, interval = "confidence")
+tab_ic <- cbind(novos_dados, round(ic, 2))
+names(tab_ic) <- c("Larg. Sépala (cm)", "Comp. Pétala (cm)", "Estimativa (cm)", "Limite inferior", "Limite superior")
+knitr::kable(tab_ic, format = "pipe", row.names = FALSE)
+```
+Table: (\#tab:previsaoConfianca) Intervalos de confiança de 95% para o comprimento médio esperado da sépala, para os dois conjuntos hipotéticos.
+
+**Interpretação prática**: para flores com largura de sépala de 2,8 cm e comprimento de pétala de 1,5 cm, estimamos que o comprimento **médio** da sépala, entre todas as flores com estas características, esteja entre `r round(ic[1,"lwr"],2)` e `r round(ic[1,"upr"],2)` cm, com 95% de confiança. Já para flores com largura de sépala de 3,2 cm e comprimento de pétala de 5,0 cm, o comprimento médio esperado da sépala está entre `r round(ic[2,"lwr"],2)` e `r round(ic[2,"upr"],2)` cm.
+
+## Intervalo de predição para uma nova observação
+
+```{r previsaoPredicao, results='asis'}
+ip <- predict(modelo2, newdata = novos_dados, interval = "prediction")
+tab_ip <- cbind(novos_dados, round(ip, 2))
+names(tab_ip) <- c("Larg. Sépala (cm)", "Comp. Pétala (cm)", "Estimativa (cm)", "Limite inferior", "Limite superior")
+knitr::kable(tab_ip, format = "pipe", row.names = FALSE)
+```
+Table: (\#tab:previsaoPredicao) Intervalos de predição de 95% para uma nova observação do comprimento da sépala, para os dois conjuntos hipotéticos.
+
+**Interpretação prática**: se observarmos **uma única nova flor** com largura de sépala de 2,8 cm e comprimento de pétala de 1,5 cm, prevemos, com 95% de confiança, que o comprimento de sua sépala estará entre `r round(ip[1,"lwr"],2)` e `r round(ip[1,"upr"],2)` cm. Este intervalo é bem mais largo do que o de confiança para a média, pois soma à incerteza sobre a média a variabilidade natural entre flores individuais. Da mesma forma, para uma nova flor com largura de sépala de 3,2 cm e comprimento de pétala de 5,0 cm, o comprimento previsto de sua sépala estará entre `r round(ip[2,"lwr"],2)` e `r round(ip[2,"upr"],2)` cm.
+
+Em ambos os casos, a estimativa pontual (`r round(ic[1,"fit"],2)` cm e `r round(ic[2,"fit"],2)` cm) é a mesma para os dois tipos de intervalo. A diferença está apenas na largura, refletindo a distinção entre estimar uma média populacional e prever uma observação individual: um intervalo de predição sempre será mais amplo do que um intervalo de confiança para os mesmos valores das variáveis explicativas, e deve ser preferido quando o interesse está em uma previsão individual específica.
+
+
+
+# Conclusão
+
+A análise exploratória confirmou forte associação entre as variáveis morfológicas das flores de Iris. O modelo inicial, com todas as variáveis contínuas, apresentou ajuste elevado ($R^2$ ajustado $= `r round(summary(modelo1)$adj.r.squared,3)`$), mas revelou multicolinearidade severa entre o comprimento e a largura da pétala (VIF de até `r round(max(vif_manual(modelo1)),1)`), evidenciada tanto pelos valores de VIF quanto pelo sinal contraintuitivo do coeficiente de `Petal.Width`.
+
+O modelo final selecionado, com largura de sépala e comprimento de pétala como variáveis explicativas, preserva grande parte do poder explicativo do modelo completo (perda de apenas `r round(100*(summary(modelo1)$adj.r.squared - summary(modelo2)$adj.r.squared),1)` pontos percentuais no $R^2$ ajustado) e elimina a multicolinearidade relevante. Seus pressupostos foram verificados e atendidos pela análise de resíduos e pelo gráfico de envelope simulado, e a investigação de pontos influentes mostrou que sua remoção não altera as conclusões substantivas do estudo.
+
+Ao incorporar a espécie como variável explicativa qualitativa, observamos que sua interação com `Petal.Length` (fortemente correlacionada com a espécie) também pode distorcer a interpretação dos coeficientes, ilustrando que o cuidado com multicolinearidade se estende também a pares de variáveis contínuas e categóricas. Por fim, demonstramos que a escolha da categoria de referência de uma variável dummy afeta apenas a interpretação dos coeficientes, não os valores preditos pelo modelo, e ilustramos a distinção prática entre intervalo de confiança e intervalo de predição, essenciais para comunicar corretamente a incerteza de uma previsão.
