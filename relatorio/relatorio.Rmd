@@ -1,5 +1,5 @@
 ---
-title: "Estatísticas de criminalidade violenta por estado americano (por 100 mil habitantes): assassinatos, assaltos e estupros, além do percentual da população urbana."
+title: "Modelagem do Número de Prisões por Assalto nos Estados Unidos"
 
 # informacoes da disciplina, exibidas no cabecalho do artigo
 disciplina: "Estatística Aplicada"
@@ -36,7 +36,14 @@ keywords:
 
 # resumo - note a barra vertical e os dois espaços no início do parágrafo
 abstract: |
-  Este trabalho aplica a metodologia de regressão linear múltipla (MRLM) ao conjunto de dados USArrests, contendo estatísticas de criminalidade violenta por estado americano em 1973. O objetivo é modelar o número de prisões por assalto a partir das taxas de assassinato, estupro e percentual de população urbana. Realizamos uma análise exploratória, ajustamos um modelo inicial com todas as variáveis explicativas contínuas e verificamos a ausência de multicolinearidade severa, diferentemente de outros cenários clássicos. Comparamos modelos candidatos por critério de Akaike (AIC) e selecionamos um modelo final parcimonioso e estatisticamente significante. Verificamos os pressupostos desse modelo através de análise de resíduos, gráfico de envelope simulado e identificação de pontos atípicos, de alavanca e influentes. Por fim, apresentamos os intervalos de confiança para o valor médio esperado da variável resposta e os intervalos de predição para novas observações.
+  Este trabalho aplica a metodologia de regressão linear múltipla (MRLM) ao conjunto de dados USArrests, contendo estatísticas de 
+  criminalidade violenta por estado americano em 1973. O objetivo é modelar o número de prisões por assalto a partir das taxas de 
+  assassinato, estupro e percentual de população urbana. Realizamos uma análise exploratória, ajustamos um modelo inicial com todas 
+  as variáveis explicativas contínuas e verificamos a ausência de multicolinearidade severa, diferentemente de outros cenários clássicos. 
+  Comparamos modelos candidatos por critério de Akaike (AIC) e selecionamos um modelo final parcimonioso e estatisticamente significante. 
+  Verificamos os pressupostos desse modelo através de análise de resíduos, gráfico de envelope simulado e identificação de pontos 
+  atípicos, de alavanca e influentes. Por fim, apresentamos os intervalos de confiança para o valor médio esperado da variável 
+  resposta e os intervalos de predição para novas observações.
 
 # arquivo com a bibliografia do relatorio
 bibliography: modeloUFCG.bib
@@ -59,7 +66,9 @@ library(corrplot)
 library(broom)
 library(hnp)
 library(lmtest)
+library(tidyr)
 library(car)
+library(lm.beta)
 
 # definicoes globais
 knitr::opts_chunk$set(
@@ -72,13 +81,6 @@ knitr::opts_chunk$set(
 dados <- read.csv("09_USArrests.csv", row.names = 1)
 names(dados)
 
-# # Corrigindo o erro de transcricao para Maryland e os arredondamentos da variavel UrbanPop
-# dados["Maryland", "UrbanPop"] <- 76.6
-# s5u <- c("Colorado", "Florida", "Mississippi", "Wyoming")
-# s5d <- c("Nebraska", "Pennsylvania")
-# dados[s5u, "UrbanPop"] <- dados[s5u, "UrbanPop"] + 0.5
-# dados[s5d, "UrbanPop"] <- dados[s5d, "UrbanPop"] - 0.5
-
 # funcao auxiliar: grafico de envelope simulado, silenciando mensagens do pacote hnp
 grafico_envelope <- function(modelo, seed = 1) {
   set.seed(seed)
@@ -87,6 +89,25 @@ grafico_envelope <- function(modelo, seed = 1) {
   ))
   plot(h, xlab = "Quantis teóricos N(0,1)", ylab = "Resíduos",
        main = "")
+}
+
+beta_padronizado <- function(modelo) {
+  mf <- model.frame(modelo)
+  y <- mf[[1]]
+  xs <- mf[-1]
+
+  coefs <- coef(modelo)[-1]  # remove intercepto
+  sdy <- sd(y, na.rm = TRUE)
+
+  betas <- sapply(names(coefs), function(v) {
+    coef(modelo)[v] * sd(xs[[v]], na.rm = TRUE) / sdy
+  })
+
+  data.frame(
+    Variável = names(betas),
+    `Beta padronizado` = round(as.numeric(betas), 3),
+    check.names = FALSE
+  )
 }
 
 # funcao auxiliar: tabela de coeficientes formatada
@@ -114,12 +135,14 @@ vif_manual <- function(modelo) {
 
 # Introdução
 
-A criminalidade é um tema importante para a análise de dados, pois diferentes fatores podem estar relacionados aos índices de violência. A base de dados utilizada
-neste trabalho, **USArrests**, reúne informações dos 50 estados americanos referentes ao ano de 1973. Ela contém o número de **prisões por assassinato** (`Murder`),
-**assalto** (`Assault`) e **estupro** (`Rape`), por 100 mil habitantes, além do percentual da população que vive em áreas urbanas (`UrbanPop`).
+A criminalidade é um tema importante para a análise de dados, pois diferentes fatores podem estar relacionados aos índices de violência. 
+A base de dados utilizada neste trabalho, USArrests, reúne informações dos 50 estados americanos referentes ao ano de 1973. 
+Ela contém o número de prisões por assassinato (Murder), assalto (Assault) e estupro (Rape), por 100 mil habitantes, 
+além do percentual da população que vive em áreas urbanas (UrbanPop).
 
-Neste trabalho, o objetivo é modelar o número de **prisões por assalto** (`Assault`) a partir das demais variáveis da base. Esse problema é interessante porque permite
-analisar como diferentes tipos de crimes e o nível de urbanização estão relacionados com a variável resposta, além de aplicar técnicas de regressão linear múltipla.
+Neste trabalho, o objetivo é modelar o número de prisões por assalto (Assault) a partir das demais variáveis da base. Esse 
+problema é interessante porque permite analisar como diferentes tipos de crimes e o nível de urbanização estão relacionados com a 
+variável resposta, além de aplicar técnicas de regressão linear múltipla.
 
 Especificamente, buscamos:
 (i) descrever a base de dados e realizar uma análise exploratória;
@@ -130,56 +153,64 @@ Especificamente, buscamos:
 
 # Metodologia
 
-Os dados correspondem aos 50 estados americanos no ano de 1973, sem valores ausentes, contendo quatro variáveis numéricas: `Murder`, `Assault`, `UrbanPop` e `Rape`.
-A análise exploratória compreendeu estatísticas descritivas, matriz de correlação, histogramas, boxplots e matriz de dispersão entre as variáveis.
+Os dados correspondem aos 50 estados americanos no ano de 1973, sem valores ausentes, contendo quatro variáveis numéricas: 
+Murder, Assault, UrbanPop e Rape. A análise exploratória compreendeu estatísticas descritivas, matriz de correlação, histogramas, 
+boxplots e matriz de dispersão entre as variáveis.
 
 ## Modelo de regressão linear múltipla
 
-Seja $y_i$ o número de **prisões por assalto** da $i$-ésima observação (estado). O modelo inicial, utilizando todas as demais variáveis da base como explicativas, é dado por
+Seja $y_i$ o número de prisões por assalto da $i$-ésima observação (estado). O modelo inicial, utilizando todas as demais variáveis 
+da base como explicativas, é dado por
 
 $$
 y_i = \beta_0 + \beta_1,\text{Murder}_i + \beta_2,\text{UrbanPop}_i + \beta_3,\text{Rape}_i + \varepsilon_i,
 $$
 
-\noindent em que $\varepsilon_i$ segue as suposições usuais do Modelo de Regressão Linear Múltipla (MRLM) \cite{Kutner2004}: média nula, variância constante,
-independência e normalidade.
+\noindent em que $\varepsilon_i$ segue as suposições usuais do Modelo de Regressão Linear Múltipla (MRLM) \cite{Kutner2004}: média nula, 
+variância constante, independência e normalidade.
 
-A multicolinearidade entre as variáveis explicativas foi avaliada por dois critérios complementares: (a) a matriz de correlações entre as variáveis preditoras,
-em que valores absolutos de correlação maiores que 0,8 indicam possível multicolinearidade; e (b) o fator de inflação da variância (VIF), dado por
-$\text{VIF}_j = 1/(1-R_j^2)$, em que $R_j^2$ é o coeficiente de determinação da regressão de $X_j$ sobre as demais variáveis explicativas. Valores de $\text{VIF}$
-superiores a 5 indicam possível problema de multicolinearidade, enquanto valores acima de 10 sugerem multicolinearidade severa \cite{Kutner2004}.
+A multicolinearidade entre as variáveis explicativas foi avaliada por dois critérios complementares: (a) a matriz de correlações entre 
+as variáveis preditoras, em que valores absolutos de correlação maiores que 0,8 indicam possível multicolinearidade; e (b) o fator de 
+inflação da variância (VIF), dado por $\text{VIF}_j = 1/(1-R_j^2)$, em que $R_j^2$ é o coeficiente de determinação da regressão de $X_j$ 
+sobre as demais variáveis explicativas. Valores de $\text{VIF}$ superiores a 5 indicam possível problema de multicolinearidade, 
+enquanto valores acima de 10 sugerem multicolinearidade severa \cite{Kutner2004}.
 
-A seleção do modelo foi realizada utilizando os critérios de informação de Akaike (AIC) \cite{Akaike1974} e Bayesiano (BIC) \cite{Schwarz1978}, além do teste
-$F$ para comparação entre modelos aninhados. Em ambos os critérios de informação, modelos com menores valores de AIC e BIC são preferíveis. Como apoio à seleção,
-também foi utilizado o procedimento automático *stepwise* (`step`), baseado no critério AIC, permitindo comparar a seleção automática com a escolha baseada na interpretação
-estatística dos resultados.
+A seleção do modelo foi realizada utilizando os critérios de informação de Akaike (AIC) \cite{Akaike1974} e Bayesiano (BIC) \cite{Schwarz1978}, 
+além do teste $F$ para comparação entre modelos aninhados. Em ambos os critérios de informação, modelos com menores valores de AIC e BIC 
+são preferíveis. Como apoio à seleção, também foi utilizado o procedimento automático *stepwise* (`step`), baseado no critério AIC, 
+permitindo comparar a seleção automática com a escolha baseada na interpretação estatística dos resultados.
 
 ## Diagnóstico do modelo
 
-A adequação do modelo selecionado foi avaliada por meio da análise gráfica dos resíduos, utilizando os gráficos de resíduos versus valores ajustados, quantil-quantil
-(Q-Q Plot), escala-localização e resíduos versus alavancagem. Esses gráficos permitem verificar os principais pressupostos do Modelo de Regressão Linear Múltipla,
-como linearidade, homocedasticidade, normalidade dos resíduos e a presença de observações influentes \cite{Kutner2004}.
+A adequação do modelo selecionado foi avaliada por meio da análise gráfica dos resíduos, utilizando os gráficos de resíduos versus 
+valores ajustados, quantil-quantil (Q-Q Plot), escala-localização e resíduos versus alavancagem. Esses gráficos permitem verificar 
+os principais pressupostos do Modelo de Regressão Linear Múltipla, como linearidade, homocedasticidade, normalidade dos resíduos e 
+a presença de observações influentes \cite{Kutner2004}.
 
-Também foram analisadas possíveis observações atípicas, de alavanca e influentes utilizando os resíduos studentizados ($|t_i| > 2$), os valores de alavancagem
-($h_{ii} > 2p/n$) e a distância de Cook ($D_i > 4/n$) \cite{Cook1977,CookWeisberg1982,Kutner2004}. Caso fossem identificadas observações com influência significativa
-sobre o ajuste, seria avaliado o impacto de sua remoção por meio do reajuste do modelo.
+Também foram analisadas possíveis observações atípicas, de alavanca e influentes utilizando os resíduos studentizados ($|t_i| > 2$), 
+os valores de alavancagem ($h_{ii} > 2p/n$) e a distância de Cook ($D_i > 4/n$) \cite{Cook1977,CookWeisberg1982,Kutner2004}. 
+Caso fossem identificadas observações com influência significativa sobre o ajuste, seria avaliado o impacto de sua remoção por meio 
+do reajuste do modelo.
 
-Por fim, para facilitar a comparação da influência das variáveis explicativas, foram calculados os coeficientes padronizados do modelo final. Como as variáveis estão em
-escalas diferentes, essa padronização permite comparar diretamente a contribuição relativa de cada variável para explicar o número de prisões por assalto.
+Por fim, para facilitar a comparação da influência das variáveis explicativas, foram calculados os coeficientes padronizados do modelo 
+final. Como as variáveis estão em escalas diferentes, essa padronização permite comparar diretamente a contribuição relativa de cada 
+variável para explicar o número de prisões por assalto.
 
 ## Variáveis explicativas
 
-Diferentemente de outros conjuntos de dados que possuem variáveis categóricas, a base **USArrests** é composta apenas por variáveis numéricas (`Murder`, `UrbanPop` e `Rape`),
-utilizadas como variáveis explicativas do modelo. Dessa forma, não foi necessária a criação de variáveis *dummy* nem a definição de uma categoria de referência.
-O modelo foi ajustado diretamente utilizando essas variáveis contínuas para explicar o número de prisões por assalto (`Assault`).
+Diferentemente de outros conjuntos de dados que possuem variáveis categóricas, a base USArrests é composta apenas por variáveis 
+numéricas (Murder, UrbanPop e Rape), utilizadas como variáveis explicativas do modelo. Dessa forma, não foi necessária a 
+criação de variáveis *dummy* nem a definição de uma categoria de referência. O modelo foi ajustado diretamente utilizando essas 
+variáveis contínuas para explicar o número de prisões por assalto (Assault).
 
 ## Inferência preditiva
 
-Para um conjunto de valores das variáveis explicativas (`Murder`, `UrbanPop` e `Rape`), é possível realizar dois tipos de inferência \cite{Kutner2004}:
-o **intervalo de confiança** para o valor médio esperado de prisões por assalto, que estima a média da resposta para estados com essas características, e
-o **intervalo de predição** para uma **nova observação**, que estima um valor futuro de prisões por assalto para um estado com as mesmas características.
-Como o intervalo de predição considera também a variabilidade entre observações individuais, ele é naturalmente mais amplo que o intervalo de confiança.
-Ambos foram calculados para dois conjuntos hipotéticos de valores das variáveis explicativas, escolhidos dentro do intervalo observado na base de dados.
+Para um conjunto de valores das variáveis explicativas (Murder, UrbanPop e Rape), é possível realizar dois tipos de inferência 
+\cite{Kutner2004}: o **intervalo de confiança** para o valor médio esperado de prisões por assalto, que estima a média da resposta 
+para estados com essas características, e o **intervalo de predição** para uma **nova observação**, que estima um valor futuro de 
+prisões por assalto para um estado com as mesmas características. Como o intervalo de predição considera também a variabilidade entre 
+observações individuais, ele é naturalmente mais amplo que o intervalo de confiança. Ambos foram calculados para dois conjuntos 
+hipotéticos de valores das variáveis explicativas, escolhidos dentro do intervalo observado na base de dados.
 
 
 
@@ -187,7 +218,8 @@ Ambos foram calculados para dois conjuntos hipotéticos de valores das variávei
 
 ## Descrição da base de dados
 
-A base `USArrests` possui $n = 50$ observações, correspondentes aos 50 estados americanos, e 4 variáveis numéricas (Tabela \ref{tab:variaveis}), sem valores ausentes.
+A base `USArrests` possui $n = 50$ observações, correspondentes aos 50 estados americanos, e 4 variáveis numéricas 
+(Tabela \ref{tab:variaveis}), sem valores ausentes.
 
 ```{r variaveis, results='asis'}
 tab_var <- data.frame(
@@ -231,12 +263,11 @@ knitr::kable(
 )
 ```
 
-A Figura \ref{fig:boxplots} apresenta os box-plots das variáveis da base. Observa-se que `Assault` e `Rape` apresentam maior dispersão dos dados, enquanto `UrbanPop` possui distribuição mais concentrada. Além disso, algumas variáveis apresentam observações mais afastadas da maior parte dos dados, indicando possíveis valores extremos.
+A Figura \ref{fig:boxplots} apresenta os box-plots das variáveis da base. Observa-se que `Assault` e `Rape` apresentam maior dispersão 
+dos dados, enquanto `UrbanPop` possui distribuição mais concentrada. Além disso, algumas variáveis apresentam observações mais 
+afastadas da maior parte dos dados, indicando possíveis valores extremos.
 
 ```{r boxplots, fig.cap="\\label{fig:boxplots} Box-plots das variáveis da base USArrests.", fig.width=7, fig.height=5}
-
-library(tidyr)
-
 dados_long <- tidyr::pivot_longer(
   dados,
   cols = everything(),
@@ -255,7 +286,18 @@ ggplot(dados_long,
 
 ### Análise de correlação
 
-A Figura \ref{fig:corrplot} exibe a matriz de correlações entre as variáveis da base `USArrests`, e a Figura \ref{fig:ggpairs} apresenta a matriz de dispersão par a par.
+```{r correlacao_obj, include=FALSE}
+cor_mat <- round(cor(dados), 2)
+r_am <- cor_mat["Assault", "Murder"]
+r_au <- cor_mat["Assault", "UrbanPop"]
+r_ar <- cor_mat["Assault", "Rape"]
+r_mr <- cor_mat["Murder", "Rape"]
+r_mu <- cor_mat["Murder", "UrbanPop"]
+r_ur <- cor_mat["UrbanPop", "Rape"]
+```
+
+A Figura \ref{fig:corrplot} exibe a matriz de correlações entre as variáveis da base `USArrests`, e a Figura \ref{fig:ggpairs} 
+apresenta a matriz de dispersão par a par.
 
 ```{r corrplot, fig.cap="\\label{fig:corrplot} Matriz de correlações entre as variáveis da base USArrests.", fig.width=4.5, fig.height=4.5, out.width="65%"}
 corrplot::corrplot(
@@ -277,20 +319,30 @@ GGally::ggpairs(
 ) + theme_bw(base_size = 8)
 ```
 
-Com relação à análise de correlação, é desejável observar altas correlações das variáveis explicativas com a variável resposta `Assault`, mas correlações elevadas *entre* as próprias variáveis explicativas podem indicar multicolinearidade. Como regra geral, correlações absolutas iguais ou superiores a $0{,}8$ constituem um indício importante desse problema. Examinando a Figura \ref{fig:corrplot} em detalhe:
+Com relação à análise de correlação, é desejável observar altas correlações das variáveis explicativas com a variável resposta 
+`Assault`, mas correlações elevadas *entre* as próprias variáveis explicativas podem indicar multicolinearidade. Como regra geral, 
+correlações absolutas iguais ou superiores a $0{,}8$ constituem um indício importante desse problema. Examinando a Figura 
+\ref{fig:corrplot} em detalhe:
 
 1. A variável resposta `Assault`:
-   i. apresenta correlação linear forte e positiva com `Murder` ($r = 0{,}80$);
-   ii. apresenta correlação linear fraca e positiva com `UrbanPop` ($r = 0{,}26$);
-   iii. apresenta correlação linear moderada e positiva com `Rape` ($r = 0{,}66$).
+   i. apresenta correlação linear forte e positiva com `Murder` ($r = `r r_am`$);
+   ii. apresenta correlação linear fraca e positiva com `UrbanPop` ($r = `r r_au`$);
+   iii. apresenta correlação linear moderada e positiva com `Rape` ($r = `r r_ar`$).
 
-2. Entre as variáveis explicativas, `Murder` correlaciona-se de forma moderada e positiva com `Rape` ($r = 0{,}56$), enquanto as correlações envolvendo `UrbanPop` apresentam baixa magnitude. Como nenhuma dessas correlações ultrapassa, em valor absoluto, o limiar de $0{,}8$, elas não configuram, isoladamente, um indício forte de multicolinearidade.
+2. Entre as variáveis explicativas, `Murder` correlaciona-se de forma `r ifelse(abs(r_mr) >= 0.8, "forte", "moderada")` e 
+`r ifelse(r_mr >= 0, "positiva", "negativa")` com `Rape` ($r = `r r_mr`$), enquanto as correlações envolvendo `Murder` como `UrbanPop` 
+($r = `r r_mu`$) e como `Rape` ($r = `r r_ur`$) apresentam baixa magnitude. Como nenhuma dessas correlações ultrapassa, 
+em valor absoluto, o limiar de $0{,}8$, elas não configuram, isoladamente, um indício forte de multicolinearidade.
 
-3. A análise da matriz de correlação sugere que as variáveis explicativas não apresentam correlações suficientemente elevadas para indicar multicolinearidade severa. Essa conclusão será complementada pela análise do fator de inflação da variância (VIF), apresentada na próxima seção.
+3. A análise da matriz de correlação sugere que as variáveis explicativas não apresentam correlações suficientemente elevadas para 
+indicar multicolinearidade severa. Essa conclusão será complementada pela análise do fator de inflação da variância (VIF), apresentada 
+na próxima seção.
 
 ### Multicolinearidade: o VIF
 
-Para avaliar formalmente a possível multicolinearidade sugerida pela análise de correlação, ajustamos um modelo inicial utilizando `Assault` como variável resposta e `Murder`, `UrbanPop` e `Rape` como variáveis explicativas. Em seguida, calculamos o fator de inflação da variância (VIF) de cada variável (Tabela \ref{tab:vifCompleto}).
+Para avaliar formalmente a possível multicolinearidade sugerida pela análise de correlação, ajustamos um modelo inicial utilizando 
+`Assault` como variável resposta e `Murder`, `UrbanPop` e `Rape` como variáveis explicativas. Em seguida, calculamos o fator de 
+inflação da variância (VIF) de cada variável (Tabela \ref{tab:vifCompleto}).
 
 ```{r modeloInicial, results='asis'}
 modelo1 <- lm(Assault ~ Murder + UrbanPop + Rape, data = dados)
@@ -314,15 +366,23 @@ knitr::kable(
 
 Table: (\#tab:vifCompleto) Fator de inflação de variância (VIF) de cada variável explicativa no modelo inicial.
 
-O modelo inicial apresenta coeficiente de determinação ajustado igual a $R^2_{aj} = `r round(summary(modelo1)$adj.r.squared, 4)`$. Observando a Tabela \ref{tab:coefInicial}, verifica-se que as variáveis `Murder` e `Rape` são estatisticamente significativas, enquanto `UrbanPop` não apresenta evidências suficientes de associação com a variável resposta ao nível de significância de 5%.
+O modelo inicial apresenta coeficiente de determinação ajustado igual a $R^2_{aj} = `r round(summary(modelo1)$adj.r.squared, 4)`$. 
+Observando a Tabela \ref{tab:coefInicial}, verifica-se que as variáveis `Murder` e `Rape` são estatisticamente significativas, 
+enquanto `UrbanPop` não apresenta evidências suficientes de associação com a variável resposta ao nível de significância de 5%.
 
-Com relação à multicolinearidade, a Tabela \ref{tab:vifCompleto} mostra que todas as variáveis explicativas apresentam valores de VIF inferiores ao limite de referência de 5, sendo o maior valor igual a `r round(max(vif_manual(modelo1)), 2)`. Esses resultados indicam que não há evidências de multicolinearidade relevante entre as variáveis explicativas, confirmando a conclusão obtida anteriormente por meio da análise da matriz de correlação.
+Com relação à multicolinearidade, a Tabela \ref{tab:vifCompleto} mostra que todas as variáveis explicativas apresentam valores de VIF 
+inferiores ao limite de referência de 5, sendo o maior valor igual a `r round(max(vif_manual(modelo1)), 2)`. Esses resultados indicam 
+que não há evidências de multicolinearidade relevante entre as variáveis explicativas, confirmando a conclusão obtida anteriormente 
+por meio da análise da matriz de correlação.
 
-Assim, a presença de multicolinearidade não constitui um problema para o ajuste do modelo, permitindo que a seleção do modelo final seja baseada principalmente na significância estatística das variáveis e nos critérios de comparação entre modelos.
+Assim, a presença de multicolinearidade não constitui um problema para o ajuste do modelo, permitindo que a seleção do modelo final 
+seja baseada principalmente na significância estatística das variáveis e nos critérios de comparação entre modelos.
 
 ## Seleção do modelo final
 
-Como a variável `UrbanPop` não apresentou significância estatística no modelo inicial, ajustamos um segundo modelo removendo essa variável e comparamos os dois modelos por meio do coeficiente de determinação ajustado, dos critérios AIC e BIC (Tabela \ref{tab:selecaoModelos}).
+Como a variável `UrbanPop` não apresentou significância estatística no modelo inicial, ajustamos um segundo modelo removendo essa 
+variável e comparamos os dois modelos por meio do coeficiente de determinação ajustado, dos critérios AIC e BIC 
+(Tabela \ref{tab:selecaoModelos}).
 
 ```{r modelosCandidatos, results='asis'}
 modelo2 <- update(modelo1, ~ . - UrbanPop)
@@ -341,7 +401,9 @@ knitr::kable(tab_selecao, format = "pipe", row.names = FALSE)
 
 Table: (\#tab:selecaoModelos) Comparação dos modelos candidatos: ajuste, AIC e BIC.
 
-Observa-se que o modelo2 apresenta valores de AIC e BIC menores que o modelo completo, além de manter praticamente o mesmo coeficiente de determinação ajustado. Esses resultados indicam que a remoção de `UrbanPop` torna o modelo mais parcimonioso, sem perda significativa de qualidade no ajuste.
+Observa-se que o modelo2 apresenta valores de AIC e BIC menores que o modelo completo, além de manter praticamente o mesmo coeficiente 
+de determinação ajustado. Esses resultados indicam que a remoção de `UrbanPop` torna o modelo mais parcimonioso, sem perda significativa 
+de qualidade no ajuste.
 
 Para verificar formalmente se a retirada da variável compromete o ajuste do modelo, realizamos um teste F comparando os dois modelos.
 
@@ -367,7 +429,8 @@ knitr::kable(
 
 Table: (\#tab:anovaModelo2) Teste F comparando o modelo2 ao modelo completo (modelo1).
 
-O teste F apresentou valor de $p = `r format.pval(p_anova, digits = 4)`$, indicando que não há evidências suficientes para rejeitar a hipótese nula de que o modelo reduzido explica os dados tão bem quanto o modelo completo.
+O teste F apresentou valor de $p = `r format.pval(p_anova, digits = 4)`$, indicando que não há evidências suficientes para rejeitar 
+a hipótese nula de que o modelo reduzido explica os dados tão bem quanto o modelo completo.
 ```{r coefModelo2, results='asis'}
 tabela_coeficientes(modelo2)
 ```
@@ -376,7 +439,8 @@ Table: (\#tab:coefModelo2) Estimativas dos coeficientes do modelo selecionado (m
 
 ## Diagnóstico do modelo selecionado
 
-A Tabela \ref{tab:coefModelo2} apresenta as estimativas dos coeficientes do modelo selecionado (`modelo2`), utilizado para verificar os pressupostos da regressão linear múltipla.
+A Tabela \ref{tab:coefModelo2} apresenta as estimativas dos coeficientes do modelo selecionado (`modelo2`), utilizado para verificar 
+os pressupostos da regressão linear múltipla.
 
 ```{r modelo2Coef, results='asis'}
 tabela_coeficientes(modelo2)
@@ -392,9 +456,13 @@ autoplot(modelo2)
 grafico_envelope(modelo2)
 ```
 
-As Figuras \ref{fig:diagnosticoModelo2} e \ref{fig:envelopeModelo2} foram utilizadas para avaliar os pressupostos do modelo de regressão. O gráfico de resíduos versus valores ajustados permite verificar a linearidade e a homocedasticidade, enquanto o gráfico quantil-quantil (QQ-plot) e o envelope simulado auxiliam na avaliação da normalidade dos resíduos.
+As Figuras \ref{fig:diagnosticoModelo2} e \ref{fig:envelopeModelo2} foram utilizadas para avaliar os pressupostos do modelo de regressão. 
+O gráfico de resíduos versus valores ajustados permite verificar a linearidade e a homocedasticidade, enquanto o gráfico quantil-quantil 
+(QQ-plot) e o envelope simulado auxiliam na avaliação da normalidade dos resíduos.
 
-Não sendo observados padrões sistemáticos nos resíduos e permanecendo a maior parte das observações dentro da banda do envelope simulado, considera-se que as suposições de linearidade, variância constante e normalidade dos erros são razoavelmente atendidas. Dessa forma, o modelo selecionado mostra-se adequado para explicar a relação entre as variáveis `Murder` e `Rape` e a variável resposta `Assault`.
+Não sendo observados padrões sistemáticos nos resíduos e permanecendo a maior parte das observações dentro da banda do envelope simulado, 
+considera-se que as suposições de linearidade, variância constante e normalidade dos erros são razoavelmente atendidas. Dessa forma, 
+o modelo selecionado mostra-se adequado para explicar a relação entre as variáveis `Murder` e `Rape` e a variável resposta `Assault`.
 
 ### Identificação de pontos atípicos, de alavanca e influentes
 
@@ -425,9 +493,12 @@ knitr::kable(tab_flag, format = "pipe", row.names = FALSE)
 
 Table: (\#tab:pontosInfluentes) Observações atípicas, de alavanca e/ou influentes segundo o modelo2.
 
-Com $n = `r n`$ observações e $p = `r p`$ parâmetros, o limiar de alavancagem é $2p/n \approx `r round(2*p/n,3)`$ e o de influência (Cook) é $4/n \approx `r round(4/n,3)`$. Ao todo, `r length(flag)` observações (`r round(100*length(flag)/n,1)`%) violam pelo menos um dos critérios, e `r sum(cook > 4/n)` são influentes segundo a distância de Cook.
+Com $n = `r n`$ observações e $p = `r p`$ parâmetros, o limiar de alavancagem é $2p/n \approx `r round(2*p/n,3)`$ e o de influência (Cook) 
+é $4/n \approx `r round(4/n,3)`$. Ao todo, `r length(flag)` observações (`r round(100*length(flag)/n,1)`%) violam pelo menos um dos 
+critérios, e `r sum(cook > 4/n)` são influentes segundo a distância de Cook.
 
-Como as observações identificadas correspondem a estados reais da base `USArrests`, não há evidências de erro de registro que justifiquem sua remoção. Assim, o modelo é mantido com todas as observações, preservando a representatividade dos dados para as análises subsequentes.
+Como as observações identificadas correspondem a estados reais da base `USArrests`, não há evidências de erro de registro que justifiquem 
+sua remoção. Assim, o modelo é mantido com todas as observações, preservando a representatividade dos dados para as análises subsequentes.
 
 ### Impacto da remoção dos pontos influentes
 
@@ -448,34 +519,78 @@ knitr::kable(comp, format = "pipe", row.names = FALSE)
 
 Table: (\#tab:comparaCoef) Comparação das estimativas antes e depois da remoção dos pontos influentes.
 
-Removendo as `r sum(cook > 4/n)` observações influentes, o coeficiente de determinação ajustado aumenta de `r round(summary(modelo2)$adj.r.squared,3)` para `r round(summary(modelo2_refinado)$adj.r.squared,3)`, e o erro padrão residual diminui de `r round(summary(modelo2)$sigma,3)` para `r round(summary(modelo2_refinado)$sigma,3)`. As variações nos coeficientes são pequenas, indicando que as observações influentes refletem a variabilidade natural dos dados e não erros de registro. Como a diferença entre as estimativas é reduzida e os pressupostos do modelo já eram atendidos pelo modelo2 completo, optamos por manter todas as observações no modelo final utilizado nas próximas seções, evitando descartar informações relevantes da base `USArrests`.
+Removendo as `r sum(cook > 4/n)` observações influentes, o coeficiente de determinação ajustado aumenta de 
+`r round(summary(modelo2)$adj.r.squared,3)` para `r round(summary(modelo2_refinado)$adj.r.squared,3)`, e o erro padrão residual diminui 
+de `r round(summary(modelo2)$sigma,3)` para `r round(summary(modelo2_refinado)$sigma,3)`. As variações nos coeficientes são pequenas, 
+indicando que as observações influentes refletem a variabilidade natural dos dados e não erros de registro. Como a diferença entre as 
+estimativas é reduzida e os pressupostos do modelo já eram atendidos pelo modelo2 completo, optamos por manter todas as observações no 
+modelo final utilizado nas próximas seções, evitando descartar informações relevantes da base `USArrests`.
 
 ## Interpretações do modelo selecionado
 
-O modelo2 explica uma proporção estatisticamente significante e substancial da variância da variável resposta `Assault` ($R^2$ ajustado $= `r round(summary(modelo2)$adj.r.squared, 3)`$; $F(2, `r df.residual(modelo2)`) = `r round(summary(modelo2)$fstatistic[1],1)`$, $p<0{,}001$). Especificamente:
+O modelo2 explica uma proporção estatisticamente significante e substancial da variância da variável resposta `Assault` 
+($R^2$ ajustado $= `r round(summary(modelo2)$adj.r.squared, 3)`$; 
+$F(2, `r df.residual(modelo2)`) = `r round(summary(modelo2)$fstatistic[1],1)`$, $p<0{,}001$). Especificamente:
 
-- para cada aumento de 1 prisão por assassinato (`Murder`), por 100 mil habitantes, mantendo `Rape` constante, o número médio esperado de prisões por assalto aumenta em $`r round(coef(modelo2)["Murder"],3)`$ por 100 mil habitantes;
+- para cada aumento de 1 prisão por assassinato (`Murder`), por 100 mil habitantes, mantendo `Rape` constante, o número médio esperado 
+de prisões por assalto aumenta em $`r round(coef(modelo2)["Murder"],3)`$ por 100 mil habitantes;
 
-- para cada aumento de 1 prisão por estupro (`Rape`), por 100 mil habitantes, mantendo `Murder` constante, o número médio esperado de prisões por assalto aumenta em $`r round(coef(modelo2)["Rape"],3)`$ por 100 mil habitantes.
+- para cada aumento de 1 prisão por estupro (`Rape`), por 100 mil habitantes, mantendo `Murder` constante, o número médio esperado 
+de prisões por assalto aumenta em $`r round(coef(modelo2)["Rape"],3)`$ por 100 mil habitantes.
 
-Note que ambos os efeitos são positivos e coerentes com a análise de correlação apresentada anteriormente. Além disso, a remoção da variável `UrbanPop` resultou em um modelo mais simples, sem perda significativa de qualidade do ajuste, confirmando que `Murder` e `Rape` são suficientes para explicar a maior parte da variação observada em `Assault`.
+Note que ambos os efeitos são positivos e coerentes com a análise de correlação apresentada anteriormente. Além disso, a remoção da 
+variável `UrbanPop` resultou em um modelo mais simples, sem perda significativa de qualidade do ajuste, confirmando que `Murder` e 
+`Rape` são suficientes para explicar a maior parte da variação observada em `Assault`.
 
 ## Comparação geral dos modelos
 
-### Coeficientes padronizados
+A Tabela \ref{tab:comparaModelos} resume as medidas de ajuste dos modelos considerados.
 
-Embora as variáveis explicativas deste modelo sejam medidas na mesma unidade (prisões por 100 mil habitantes), calculamos os coeficientes padronizados para ilustrar a comparação da importância relativa de cada variável explicativa.
+```{r comparaModelosGeral, results='asis'}
+tab_geral <- data.frame(
+  Modelo = c("modelo1 (completo)", "modelo2 (sem UrbanPop)"),
+  n = c(nobs(modelo1), nobs(modelo2)),
+  `R² ajustado` = round(c(summary(modelo1)$adj.r.squared,
+                          summary(modelo2)$adj.r.squared), 3),
+  AIC = round(c(AIC(modelo1), AIC(modelo2)), 2),
+  BIC = round(c(BIC(modelo1), BIC(modelo2)), 2),
+  check.names = FALSE
+)
 
-```{r padronizados, echo=TRUE}
-lm.beta::lm.beta(modelo2)
+knitr::kable(tab_geral, format = "pipe", row.names = FALSE)
 ```
 
-Os coeficientes padronizados indicam que `Murder` (beta padronizado $\approx `r round(lm.beta::lm.beta(modelo2)$standardized.coefficients["Murder"],2)`$) possui maior peso relativo do que `Rape` (beta padronizado $\approx `r round(lm.beta::lm.beta(modelo2)$standardized.coefficients["Rape"],2)`$) na explicação da variável resposta `Assault`, uma vez que ambas são comparadas na mesma escala.
+Table: (#tab:comparaModelos) Comparação das medidas de ajuste entre os modelos considerados.
+
+O modelo2 permanece o mais parcimonioso entre os candidatos avaliados, apresentando bom ajuste e melhor equilíbrio entre simplicidade 
+e desempenho. Por isso, ele foi escolhido como modelo final para as análises seguintes.
+
+### Coeficientes padronizados
+
+Embora as variáveis explicativas deste modelo estejam na mesma unidade (prisões por 100 mil habitantes), calculamos os coeficientes 
+padronizados para comparar a importância relativa de cada variável explicativa.
+
+```{r padronizados, results='asis'}
+tab_beta <- beta_padronizado(modelo2)
+
+knitr::kable(
+  tab_beta,
+  format = "pipe",
+  row.names = FALSE,
+  caption = "\\label{tab:padronizados} Coeficientes padronizados do modelo2."
+)
+```
+
+Os coeficientes padronizados indicam que `Murder` possui maior peso relativo do que `Rape` na explicação da variável resposta `Assault`, 
+já que ambas estão sendo comparadas na mesma escala.
 
 
 # Previsões
 
-Para realizar previsões, é recomendável utilizar valores das variáveis explicativas dentro do intervalo observado nos dados (Tabela \ref{tab:descritivas}). Utilizando o modelo2, apresentamos as previsões para dois conjuntos hipotéticos: $\mathbf{x}_1$, representando um estado com menores taxas de prisões por assassinato (`Murder = 5`) e estupro (`Rape = 15`); e $\mathbf{x}_2$, representando um estado com taxas mais elevadas desses crimes (`Murder = 15` e `Rape = 30`).
+Para realizar previsões, é recomendável utilizar valores das variáveis explicativas dentro do intervalo observado nos dados 
+(Tabela \ref{tab:descritivas}). Utilizando o modelo2, apresentamos as previsões para dois conjuntos hipotéticos: $\mathbf{x}_1$, 
+representando um estado com menores taxas de prisões por assassinato (`Murder = 5`) e estupro (`Rape = 15`); e $\mathbf{x}_2$, 
+representando um estado com taxas mais elevadas desses crimes (`Murder = 15` e `Rape = 30`).
 
 ## Intervalo de confiança para o valor médio esperado
 
@@ -504,9 +619,13 @@ knitr::kable(
 )
 ```
 
-Table: (\#tab:previsaoConfianca) Intervalos de confiança de 95% para o número médio esperado de prisões por assalto, para os dois conjuntos hipotéticos.
+Table: (\#tab:previsaoConfianca) Intervalos de confiança de 95% para o número médio esperado de prisões por assalto, para os dois 
+conjuntos hipotéticos.
 
-**Interpretação prática**: para um estado com taxa de `Murder = 5` e `Rape = 15` (por 100 mil habitantes), estimamos que o número **médio** de prisões por assalto esteja entre `r round(ic[1,"lwr"],2)` e `r round(ic[1,"upr"],2)` por 100 mil habitantes, com 95% de confiança. Já para um estado com `Murder = 15` e `Rape = 30`, o número médio esperado de prisões por assalto está entre `r round(ic[2,"lwr"],2)` e `r round(ic[2,"upr"],2)` por 100 mil habitantes.
+**Interpretação prática**: para um estado com taxa de `Murder = 5` e `Rape = 15` (por 100 mil habitantes), estimamos que o número 
+**médio** de prisões por assalto esteja entre `r round(ic[1,"lwr"],2)` e `r round(ic[1,"upr"],2)` por 100 mil habitantes, com 95% de 
+confiança. Já para um estado com `Murder = 15` e `Rape = 30`, o número médio esperado de prisões por assalto está entre 
+`r round(ic[2,"lwr"],2)` e `r round(ic[2,"upr"],2)` por 100 mil habitantes.
 
 ## Intervalo de predição para uma nova observação
 
@@ -530,17 +649,35 @@ knitr::kable(
 )
 ```
 
-Table: (\#tab:previsaoPredicao) Intervalos de predição de 95% para uma nova observação da variável `Assault`, para os dois conjuntos hipotéticos.
+Table: (\#tab:previsaoPredicao) Intervalos de predição de 95% para uma nova observação da variável `Assault`, para os dois conjuntos 
+hipotéticos.
 
-**Interpretação prática**: se observarmos **um único novo estado** com taxas de `Murder = 5` e `Rape = 15` (por 100 mil habitantes), prevemos, com 95% de confiança, que a taxa de prisões por assalto estará entre `r round(ip[1,"lwr"],2)` e `r round(ip[1,"upr"],2)` por 100 mil habitantes. Este intervalo é mais largo do que o intervalo de confiança para a média, pois considera, além da incerteza da estimativa média, a variabilidade natural entre os estados. Da mesma forma, para um novo estado com `Murder = 15` e `Rape = 30`, a taxa prevista de prisões por assalto estará entre `r round(ip[2,"lwr"],2)` e `r round(ip[2,"upr"],2)` por 100 mil habitantes.
+**Interpretação prática**: se observarmos **um único novo estado** com taxas de `Murder = 5` e `Rape = 15` (por 100 mil habitantes), 
+prevemos, com 95% de confiança, que a taxa de prisões por assalto estará entre `r round(ip[1,"lwr"],2)` e `r round(ip[1,"upr"],2)` 
+por 100 mil habitantes. Este intervalo é mais largo do que o intervalo de confiança para a média, pois considera, além da incerteza da 
+estimativa média, a variabilidade natural entre os estados. Da mesma forma, para um novo estado com `Murder = 15` e `Rape = 30`, a 
+taxa prevista de prisões por assalto estará entre `r round(ip[2,"lwr"],2)` e `r round(ip[2,"upr"],2)` por 100 mil habitantes.
 
-Em ambos os casos, a estimativa pontual (`r round(ip[1,"fit"],2)` e `r round(ip[2,"fit"],2)` prisões por 100 mil habitantes) permanece a mesma dos intervalos de confiança. A diferença está apenas na largura dos intervalos, refletindo a distinção entre estimar a média da população e prever o valor de uma única observação. Por esse motivo, o intervalo de predição é sempre mais amplo e deve ser utilizado quando o interesse é prever o comportamento de um estado específico.
+Em ambos os casos, a estimativa pontual (`r round(ip[1,"fit"],2)` e `r round(ip[2,"fit"],2)` prisões por 100 mil habitantes) permanece 
+a mesma dos intervalos de confiança. A diferença está apenas na largura dos intervalos, refletindo a distinção entre estimar a média 
+da população e prever o valor de uma única observação. Por esse motivo, o intervalo de predição é sempre mais amplo e deve ser utilizado 
+quando o interesse é prever o comportamento de um estado específico.
 
 
 # Conclusão
 
-A análise exploratória indicou associação positiva entre a variável resposta `Assault` e as variáveis `Murder` e `Rape`, enquanto `UrbanPop` apresentou relação mais fraca com as demais variáveis. O modelo inicial, contendo todas as variáveis explicativas, apresentou bom ajuste ($R^2$ ajustado $= `r round(summary(modelo1)$adj.r.squared,3)`$), sem evidências de multicolinearidade severa, uma vez que todos os valores de VIF permaneceram abaixo dos limites de referência.
+A análise exploratória indicou associação positiva entre a variável resposta `Assault` e as variáveis `Murder` e `Rape`, enquanto 
+`UrbanPop` apresentou relação mais fraca com as demais variáveis. O modelo inicial, contendo todas as variáveis explicativas, 
+apresentou bom ajuste ($R^2$ ajustado $= `r round(summary(modelo1)$adj.r.squared,3)`$), sem evidências de multicolinearidade severa, 
+uma vez que todos os valores de VIF permaneceram abaixo dos limites de referência.
 
-O modelo final selecionado, composto pelas variáveis `Murder` e `Rape`, preservou praticamente o mesmo poder explicativo do modelo completo (perda de apenas `r round(100*(summary(modelo1)$adj.r.squared - summary(modelo2)$adj.r.squared),1)` pontos percentuais no $R^2$ ajustado) e apresentou valores menores de AIC e BIC, resultando em um modelo mais simples e parcimonioso. Seus pressupostos foram verificados por meio da análise dos resíduos e do gráfico de envelope simulado, e a avaliação dos pontos influentes mostrou que sua remoção não altera de forma relevante as estimativas do modelo.
+O modelo final selecionado, composto pelas variáveis `Murder` e `Rape`, preservou praticamente o mesmo poder explicativo do modelo 
+completo (perda de apenas `r round(100*(summary(modelo1)$adj.r.squared - summary(modelo2)$adj.r.squared),1)` pontos percentuais no 
+$R^2$ ajustado) e apresentou valores menores de AIC e BIC, resultando em um modelo mais simples e parcimonioso. Seus pressupostos 
+foram verificados por meio da análise dos resíduos e do gráfico de envelope simulado, e a avaliação dos pontos influentes mostrou 
+que sua remoção não altera de forma relevante as estimativas do modelo.
 
-Por fim, foram obtidos intervalos de confiança para o valor médio esperado e intervalos de predição para novas observações, evidenciando a diferença entre estimar a média da resposta e prever o comportamento de um estado específico. Dessa forma, o modelo selecionado mostrou-se adequado para explicar a variação da taxa de prisões por assalto a partir das taxas de prisões por assassinato e estupro, atendendo aos objetivos propostos neste trabalho.
+Por fim, foram obtidos intervalos de confiança para o valor médio esperado e intervalos de predição para novas observações, 
+evidenciando a diferença entre estimar a média da resposta e prever o comportamento de um estado específico. Dessa forma, o modelo 
+selecionado mostrou-se adequado para explicar a variação da taxa de prisões por assalto a partir das taxas de prisões por assassinato 
+e estupro, atendendo aos objetivos propostos neste trabalho.
