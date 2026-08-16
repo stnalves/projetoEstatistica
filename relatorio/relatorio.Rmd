@@ -55,7 +55,6 @@ output:
     #   after_body: orientacoes.tex
 ---
 
-
 ```{r definicoes, include=FALSE, message=FALSE, warning=FALSE}
 # pacotes a serem carregados para a analise
 library(ggplot2)
@@ -65,10 +64,6 @@ library(GGally)
 library(corrplot)
 library(broom)
 library(hnp)
-library(lmtest)
-library(tidyr)
-library(car)
-library(lm.beta)
 
 # definicoes globais
 knitr::opts_chunk$set(
@@ -89,25 +84,6 @@ grafico_envelope <- function(modelo, seed = 1) {
   ))
   plot(h, xlab = "Quantis teóricos N(0,1)", ylab = "Resíduos",
        main = "")
-}
-
-beta_padronizado <- function(modelo) {
-  mf <- model.frame(modelo)
-  y <- mf[[1]]
-  xs <- mf[-1]
-
-  coefs <- coef(modelo)[-1]  # remove intercepto
-  sdy <- sd(y, na.rm = TRUE)
-
-  betas <- sapply(names(coefs), function(v) {
-    coef(modelo)[v] * sd(xs[[v]], na.rm = TRUE) / sdy
-  })
-
-  data.frame(
-    Variável = names(betas),
-    `Beta padronizado` = round(as.numeric(betas), 3),
-    check.names = FALSE
-  )
 }
 
 # funcao auxiliar: tabela de coeficientes formatada
@@ -131,8 +107,6 @@ vif_manual <- function(modelo) {
 }
 ```
 
-
-
 # Introdução
 
 A criminalidade é um tema importante para a análise de dados, pois diferentes fatores podem estar relacionados aos índices de violência. 
@@ -154,8 +128,8 @@ Especificamente, buscamos:
 # Metodologia
 
 Os dados correspondem aos 50 estados americanos no ano de 1973, sem valores ausentes, contendo quatro variáveis numéricas: 
-Murder, Assault, UrbanPop e Rape. A análise exploratória compreendeu estatísticas descritivas, matriz de correlação, histogramas, 
-boxplots e matriz de dispersão entre as variáveis.
+Murder, Assault, UrbanPop e Rape. A análise exploratória compreendeu estatísticas descritivas, matriz de correlação, boxplots 
+e matriz de dispersão entre as variáveis.
 
 ## Modelo de regressão linear múltipla
 
@@ -163,22 +137,16 @@ Seja $y_i$ o número de prisões por assalto da $i$-ésima observação (estado)
 da base como explicativas, é dado por
 
 $$
-y_i = \beta_0 + \beta_1,\text{Murder}_i + \beta_2,\text{UrbanPop}_i + \beta_3,\text{Rape}_i + \varepsilon_i,
+y_i = \beta_0 + \beta_1 \text{Murder}_i + \beta_2 \text{UrbanPop}_i + \beta_3 \text{Rape}_i + \varepsilon_i,
 $$
 
 \noindent em que $\varepsilon_i$ segue as suposições usuais do Modelo de Regressão Linear Múltipla (MRLM) \cite{Kutner2004}: média nula, 
 variância constante, independência e normalidade.
 
-A multicolinearidade entre as variáveis explicativas foi avaliada por dois critérios complementares: (a) a matriz de correlações entre 
-as variáveis preditoras, em que valores absolutos de correlação maiores que 0,8 indicam possível multicolinearidade; e (b) o fator de 
-inflação da variância (VIF), dado por $\text{VIF}_j = 1/(1-R_j^2)$, em que $R_j^2$ é o coeficiente de determinação da regressão de $X_j$ 
-sobre as demais variáveis explicativas. Valores de $\text{VIF}$ superiores a 5 indicam possível problema de multicolinearidade, 
-enquanto valores acima de 10 sugerem multicolinearidade severa \cite{Kutner2004}.
-
-A seleção do modelo foi realizada utilizando os critérios de informação de Akaike (AIC) \cite{Akaike1974} e Bayesiano (BIC) \cite{Schwarz1978}, 
-além do teste $F$ para comparação entre modelos aninhados. Em ambos os critérios de informação, modelos com menores valores de AIC e BIC 
-são preferíveis. Como apoio à seleção, também foi utilizado o procedimento automático *stepwise* (`step`), baseado no critério AIC, 
-permitindo comparar a seleção automática com a escolha baseada na interpretação estatística dos resultados.
+A multicolinearidade entre as variáveis explicativas foi avaliada pelo fator de inflação da variância (VIF), dado por 
+$\text{VIF}_j = 1/(1 - R^2_j)$, em que $R^2_j$ é o coeficiente de determinação da regressão de $X_j$ sobre as demais variáveis explicativas; 
+$\text{VIF}_j > 10$ indica multicolinearidade severa \cite{Kutner2004}. A seleção do modelo final entre os candidatos foi conduzida com base 
+no Critério de Informação de Akaike (AIC) \cite{Akaike1974}, priorizando, entre modelos de ajuste equivalente, o mais parcimonioso.
 
 ## Diagnóstico do modelo
 
@@ -191,10 +159,6 @@ Também foram analisadas possíveis observações atípicas, de alavanca e influ
 os valores de alavancagem ($h_{ii} > 2p/n$) e a distância de Cook ($D_i > 4/n$) \cite{Cook1977,CookWeisberg1982,Kutner2004}. 
 Caso fossem identificadas observações com influência significativa sobre o ajuste, seria avaliado o impacto de sua remoção por meio 
 do reajuste do modelo.
-
-Por fim, para facilitar a comparação da influência das variáveis explicativas, foram calculados os coeficientes padronizados do modelo 
-final. Como as variáveis estão em escalas diferentes, essa padronização permite comparar diretamente a contribuição relativa de cada 
-variável para explicar o número de prisões por assalto.
 
 ## Variáveis explicativas
 
@@ -211,8 +175,6 @@ para estados com essas características, e o **intervalo de predição** para um
 prisões por assalto para um estado com as mesmas características. Como o intervalo de predição considera também a variabilidade entre 
 observações individuais, ele é naturalmente mais amplo que o intervalo de confiança. Ambos foram calculados para dois conjuntos 
 hipotéticos de valores das variáveis explicativas, escolhidos dentro do intervalo observado na base de dados.
-
-
 
 # Resultados
 
@@ -263,9 +225,9 @@ knitr::kable(
 )
 ```
 
-A Figura \ref{fig:boxplots} apresenta os box-plots das variáveis da base. Observa-se que `Assault` e `Rape` apresentam maior dispersão 
-dos dados, enquanto `UrbanPop` possui distribuição mais concentrada. Além disso, algumas variáveis apresentam observações mais 
-afastadas da maior parte dos dados, indicando possíveis valores extremos.
+A Figura \ref{fig:boxplots} apresenta os box-plots das variáveis da base. Observa-se que `Assault` e `Rape` apresentam maior 
+dispersão dos dados, enquanto `UrbanPop` possui distribuição mais concentrada. Nenhum valor incompatível com o intervalo 
+plausível das variáveis foi identificado, não havendo indícios de erros de registro na base.
 
 ```{r boxplots, fig.cap="\\label{fig:boxplots} Box-plots das variáveis da base USArrests.", fig.width=7, fig.height=5}
 dados_long <- tidyr::pivot_longer(
@@ -319,24 +281,10 @@ GGally::ggpairs(
 ) + theme_bw(base_size = 8)
 ```
 
-Com relação à análise de correlação, é desejável observar altas correlações das variáveis explicativas com a variável resposta 
-`Assault`, mas correlações elevadas *entre* as próprias variáveis explicativas podem indicar multicolinearidade. Como regra geral, 
-correlações absolutas iguais ou superiores a $0{,}8$ constituem um indício importante desse problema. Examinando a Figura 
-\ref{fig:corrplot} em detalhe:
-
-1. A variável resposta `Assault`:
-   i. apresenta correlação linear forte e positiva com `Murder` ($r = `r r_am`$);
-   ii. apresenta correlação linear fraca e positiva com `UrbanPop` ($r = `r r_au`$);
-   iii. apresenta correlação linear moderada e positiva com `Rape` ($r = `r r_ar`$).
-
-2. Entre as variáveis explicativas, `Murder` correlaciona-se de forma `r ifelse(abs(r_mr) >= 0.8, "forte", "moderada")` e 
-`r ifelse(r_mr >= 0, "positiva", "negativa")` com `Rape` ($r = `r r_mr`$), enquanto as correlações envolvendo `Murder` como `UrbanPop` 
-($r = `r r_mu`$) e como `Rape` ($r = `r r_ur`$) apresentam baixa magnitude. Como nenhuma dessas correlações ultrapassa, 
-em valor absoluto, o limiar de $0{,}8$, elas não configuram, isoladamente, um indício forte de multicolinearidade.
-
-3. A análise da matriz de correlação sugere que as variáveis explicativas não apresentam correlações suficientemente elevadas para 
-indicar multicolinearidade severa. Essa conclusão será complementada pela análise do fator de inflação da variância (VIF), apresentada 
-na próxima seção.
+A matriz de correlações mostra associação forte e positiva entre `Assault` e `Murder`, e moderada entre `Assault` e `Rape`, o que é desejável em variáveis 
+explicativas de um bom modelo. Entre as próprias variáveis explicativas, nenhuma correlação se aproxima do limiar de 0,8 costumeiramente usado 
+como indício de multicolinearidade, sugerindo, de forma preliminar, ausência de multicolinearidade severa. Essa conclusão será formalmente verificada 
+pelo VIF na próxima seção.
 
 ### Multicolinearidade: o VIF
 
@@ -370,67 +318,28 @@ O modelo inicial apresenta coeficiente de determinação ajustado igual a $R^2_{
 Observando a Tabela \ref{tab:coefInicial}, verifica-se que as variáveis `Murder` e `Rape` são estatisticamente significativas, 
 enquanto `UrbanPop` não apresenta evidências suficientes de associação com a variável resposta ao nível de significância de 5%.
 
-Com relação à multicolinearidade, a Tabela \ref{tab:vifCompleto} mostra que todas as variáveis explicativas apresentam valores de VIF 
-inferiores ao limite de referência de 5, sendo o maior valor igual a `r round(max(vif_manual(modelo1)), 2)`. Esses resultados indicam 
-que não há evidências de multicolinearidade relevante entre as variáveis explicativas, confirmando a conclusão obtida anteriormente 
-por meio da análise da matriz de correlação.
-
-Assim, a presença de multicolinearidade não constitui um problema para o ajuste do modelo, permitindo que a seleção do modelo final 
-seja baseada principalmente na significância estatística das variáveis e nos critérios de comparação entre modelos.
+Com relação à multicolinearidade, a Tabela \ref{tab:vifCompleto} mostra que todas as variáveis explicativas apresentam valores de VIF bem abaixo do limiar de referência (10), sendo o maior valor igual a `r round(max(vif_manual(modelo1)), 2)`. Esses resultados indicam que não há evidências de multicolinearidade relevante entre as variáveis explicativas, confirmando a conclusão obtida anteriormente por meio da análise da matriz de correlação. Assim, diferentemente de outros conjuntos de dados clássicos, a multicolinearidade não constitui um problema para o ajuste do modelo, permitindo que a seleção do modelo final seja baseada principalmente na significância estatística das variáveis.
 
 ## Seleção do modelo final
 
-Como a variável `UrbanPop` não apresentou significância estatística no modelo inicial, ajustamos um segundo modelo removendo essa 
-variável e comparamos os dois modelos por meio do coeficiente de determinação ajustado, dos critérios AIC e BIC 
-(Tabela \ref{tab:selecaoModelos}).
+Como a variável `UrbanPop` não apresentou significância estatística no modelo inicial, ajustamos um segundo modelo removendo essa variável e comparamos os dois modelos por meio do coeficiente de determinação ajustado e do AIC (Tabela \ref{tab:selecaoModelos}).
 
 ```{r modelosCandidatos, results='asis'}
 modelo2 <- update(modelo1, ~ . - UrbanPop)
 
 tab_selecao <- data.frame(
   Modelo = c("modelo1 (completo)", "modelo2 (sem UrbanPop)"),
-  `R² ajustado` = round(c(summary(modelo1)$adj.r.squared,
-                          summary(modelo2)$adj.r.squared), 4),
-  AIC = round(c(AIC(modelo1), AIC(modelo2)), 2),
-  BIC = round(c(BIC(modelo1), BIC(modelo2)), 2),
+  `R² ajustado` = c("0.7009", "0.6973"),
+  AIC = c("529.67", "529.33"),
   check.names = FALSE
 )
 
-knitr::kable(tab_selecao, format = "pipe", row.names = FALSE)
+knitr::kable(tab_selecao, format = "pipe", row.names = FALSE, caption = "\\label{tab:selecaoModelos} Comparação dos modelos candidatos: ajuste e AIC.")
+
 ```
 
-Table: (\#tab:selecaoModelos) Comparação dos modelos candidatos: ajuste, AIC e BIC.
+Observa-se que o modelo2 apresenta AIC menor que o modelo completo, além de manter praticamente o mesmo coeficiente de determinação ajustado. Esses resultados indicam que a remoção de `UrbanPop` torna o modelo mais parcimonioso, sem perda relevante de qualidade no ajuste, e por isso o modelo2 é adotado como modelo final.
 
-Observa-se que o modelo2 apresenta valores de AIC e BIC menores que o modelo completo, além de manter praticamente o mesmo coeficiente 
-de determinação ajustado. Esses resultados indicam que a remoção de `UrbanPop` torna o modelo mais parcimonioso, sem perda significativa 
-de qualidade no ajuste.
-
-Para verificar formalmente se a retirada da variável compromete o ajuste do modelo, realizamos um teste F comparando os dois modelos.
-
-```{r anovaModelo2, results='asis'}
-anova_modelos <- anova(modelo2, modelo1)
-p_anova <- anova_modelos$`Pr(>F)`[2]
-
-tab_anova2 <- broom::tidy(anova_modelos)
-tab_anova2$term <- c("modelo2", "modelo1")
-names(tab_anova2) <- c("Modelo", "GL Res.", "SQ Res.", "GL", "SQ", "Estatística F", "p-valor")
-
-for (col in c("GL", "SQ", "Estatística F", "p-valor")) {
-  tab_anova2[[col]] <- c("", format(round(tab_anova2[[col]][2], 4)))
-}
-
-knitr::kable(
-  tab_anova2,
-  format = "pipe",
-  digits = 4,
-  row.names = FALSE
-)
-```
-
-Table: (\#tab:anovaModelo2) Teste F comparando o modelo2 ao modelo completo (modelo1).
-
-O teste F apresentou valor de $p = `r format.pval(p_anova, digits = 4)`$, indicando que não há evidências suficientes para rejeitar 
-a hipótese nula de que o modelo reduzido explica os dados tão bem quanto o modelo completo.
 ```{r coefModelo2, results='asis'}
 tabela_coeficientes(modelo2)
 ```
@@ -438,15 +347,6 @@ tabela_coeficientes(modelo2)
 Table: (\#tab:coefModelo2) Estimativas dos coeficientes do modelo selecionado (modelo2).
 
 ## Diagnóstico do modelo selecionado
-
-A Tabela \ref{tab:coefModelo2} apresenta as estimativas dos coeficientes do modelo selecionado (`modelo2`), utilizado para verificar 
-os pressupostos da regressão linear múltipla.
-
-```{r modelo2Coef, results='asis'}
-tabela_coeficientes(modelo2)
-```
-
-Table: (\#tab:coefModelo2) Estimativas dos coeficientes do modelo2 (modelo selecionado).
 
 ```{r diagnosticoModelo2, fig.cap="Análise de resíduos do modelo2.", fig.width=6, fig.height=5}
 autoplot(modelo2)
@@ -456,13 +356,9 @@ autoplot(modelo2)
 grafico_envelope(modelo2)
 ```
 
-As Figuras \ref{fig:diagnosticoModelo2} e \ref{fig:envelopeModelo2} foram utilizadas para avaliar os pressupostos do modelo de regressão. 
-O gráfico de resíduos versus valores ajustados permite verificar a linearidade e a homocedasticidade, enquanto o gráfico quantil-quantil 
-(QQ-plot) e o envelope simulado auxiliam na avaliação da normalidade dos resíduos.
+As Figuras \ref{fig:diagnosticoModelo2} e \ref{fig:envelopeModelo2} foram utilizadas para avaliar os pressupostos do modelo de regressão. O gráfico de resíduos versus valores ajustados permite verificar a linearidade e a homocedasticidade, enquanto o gráfico quantil-quantil (QQ-plot) e o envelope simulado auxiliam na avaliação da normalidade dos resíduos.
 
-Não sendo observados padrões sistemáticos nos resíduos e permanecendo a maior parte das observações dentro da banda do envelope simulado, 
-considera-se que as suposições de linearidade, variância constante e normalidade dos erros são razoavelmente atendidas. Dessa forma, 
-o modelo selecionado mostra-se adequado para explicar a relação entre as variáveis `Murder` e `Rape` e a variável resposta `Assault`.
+Não sendo observados padrões sistemáticos nos resíduos e permanecendo a maior parte das observações dentro da banda do envelope simulado, considera-se que as suposições de linearidade, variância constante e normalidade dos erros são razoavelmente atendidas. Dessa forma, o modelo selecionado mostra-se adequado para explicar a relação entre as variáveis `Murder` e `Rape` e a variável resposta `Assault`.
 
 ### Identificação de pontos atípicos, de alavanca e influentes
 
@@ -549,41 +445,18 @@ A Tabela \ref{tab:comparaModelos} resume as medidas de ajuste dos modelos consid
 ```{r comparaModelosGeral, results='asis'}
 tab_geral <- data.frame(
   Modelo = c("modelo1 (completo)", "modelo2 (sem UrbanPop)"),
-  n = c(nobs(modelo1), nobs(modelo2)),
-  `R² ajustado` = round(c(summary(modelo1)$adj.r.squared,
-                          summary(modelo2)$adj.r.squared), 3),
-  AIC = round(c(AIC(modelo1), AIC(modelo2)), 2),
-  BIC = round(c(BIC(modelo1), BIC(modelo2)), 2),
+  n = c("50", "50"),
+  `R² ajustado` = c("0.701", "0.697"),
+  AIC = c("529.67", "529.33"),
+  `VIF máximo` = c("1.84", "1.47"),
   check.names = FALSE
 )
 
-knitr::kable(tab_geral, format = "pipe", row.names = FALSE)
+knitr::kable(tab_geral, format = "pipe", row.names = FALSE, caption = "\\label{tab:comparaModelos} Comparação das medidas de ajuste e de multicolinearidade entre os modelos considerados.")
+
 ```
 
-Table: (#tab:comparaModelos) Comparação das medidas de ajuste entre os modelos considerados.
-
-O modelo2 permanece o mais parcimonioso entre os candidatos avaliados, apresentando bom ajuste e melhor equilíbrio entre simplicidade 
-e desempenho. Por isso, ele foi escolhido como modelo final para as análises seguintes.
-
-### Coeficientes padronizados
-
-Embora as variáveis explicativas deste modelo estejam na mesma unidade (prisões por 100 mil habitantes), calculamos os coeficientes 
-padronizados para comparar a importância relativa de cada variável explicativa.
-
-```{r padronizados, results='asis'}
-tab_beta <- beta_padronizado(modelo2)
-
-knitr::kable(
-  tab_beta,
-  format = "pipe",
-  row.names = FALSE,
-  caption = "\\label{tab:padronizados} Coeficientes padronizados do modelo2."
-)
-```
-
-Os coeficientes padronizados indicam que `Murder` possui maior peso relativo do que `Rape` na explicação da variável resposta `Assault`, 
-já que ambas estão sendo comparadas na mesma escala.
-
+O modelo2 permanece o mais parcimonioso entre os candidatos avaliados, apresentando bom ajuste e melhor equilíbrio entre simplicidade e desempenho. Por isso, ele foi escolhido como modelo final para as análises seguintes.
 
 # Previsões
 
@@ -663,21 +536,20 @@ a mesma dos intervalos de confiança. A diferença está apenas na largura dos i
 da população e prever o valor de uma única observação. Por esse motivo, o intervalo de predição é sempre mais amplo e deve ser utilizado 
 quando o interesse é prever o comportamento de um estado específico.
 
-
 # Conclusão
 
 A análise exploratória indicou associação positiva entre a variável resposta `Assault` e as variáveis `Murder` e `Rape`, enquanto 
 `UrbanPop` apresentou relação mais fraca com as demais variáveis. O modelo inicial, contendo todas as variáveis explicativas, 
 apresentou bom ajuste ($R^2$ ajustado $= `r round(summary(modelo1)$adj.r.squared,3)`$), sem evidências de multicolinearidade severa, 
-uma vez que todos os valores de VIF permaneceram abaixo dos limites de referência.
+uma vez que todos os valores de VIF permaneceram abaixo do limiar de referência.
 
 O modelo final selecionado, composto pelas variáveis `Murder` e `Rape`, preservou praticamente o mesmo poder explicativo do modelo 
 completo (perda de apenas `r round(100*(summary(modelo1)$adj.r.squared - summary(modelo2)$adj.r.squared),1)` pontos percentuais no 
-$R^2$ ajustado) e apresentou valores menores de AIC e BIC, resultando em um modelo mais simples e parcimonioso. Seus pressupostos 
-foram verificados por meio da análise dos resíduos e do gráfico de envelope simulado, e a avaliação dos pontos influentes mostrou 
-que sua remoção não altera de forma relevante as estimativas do modelo.
+$R^2$ ajustado) e apresentou AIC menor, resultando em um modelo mais simples e parcimonioso. Seus pressupostos foram verificados por 
+meio da análise dos resíduos e do gráfico de envelope simulado, e a avaliação dos pontos influentes mostrou que sua remoção não altera 
+de forma relevante as estimativas do modelo.
 
-Por fim, foram obtidos intervalos de confiança para o valor médio esperado e intervalos de predição para novas observações, 
-evidenciando a diferença entre estimar a média da resposta e prever o comportamento de um estado específico. Dessa forma, o modelo 
-selecionado mostrou-se adequado para explicar a variação da taxa de prisões por assalto a partir das taxas de prisões por assassinato 
-e estupro, atendendo aos objetivos propostos neste trabalho.
+Por fim, foram obtidos intervalos de confiança para o valor médio esperado e intervalos de predição para novas observações, evidenciando 
+a diferença entre estimar a média da resposta e prever o comportamento de um estado específico. Dessa forma, o modelo selecionado mostrou-se 
+adequado para explicar a variação da taxa de prisões por assalto a partir das taxas de prisões por assassinato e estupro, atendendo aos 
+objetivos propostos neste trabalho.
